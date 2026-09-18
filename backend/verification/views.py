@@ -25,6 +25,28 @@ class DocumentVerificationView(APIView):
             id=document_id,
         )
 
+        # -------------------------------------------------
+        # Only documents waiting for review can be
+        # approved or rejected.
+        #
+        # This prevents an old VERIFIED or REJECTED
+        # document from being verified again.
+        # -------------------------------------------------
+
+        if document.status not in (
+            EmployeeDocument.Status.UPLOADED,
+            EmployeeDocument.Status.PENDING_REVIEW,
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Only documents awaiting "
+                        "review can be verified."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         verification_status = request.data.get(
             "status"
         )
@@ -33,6 +55,10 @@ class DocumentVerificationView(APIView):
             "comments",
             "",
         )
+
+        # -------------------------------------------------
+        # Validate verification status
+        # -------------------------------------------------
 
         if verification_status not in (
             Verification.Status.APPROVED,
@@ -47,6 +73,10 @@ class DocumentVerificationView(APIView):
                 },
                 status=status.HTTP_400_BAD_REQUEST,
             )
+
+        # -------------------------------------------------
+        # Rejection comments are mandatory
+        # -------------------------------------------------
 
         if (
             verification_status
@@ -65,6 +95,10 @@ class DocumentVerificationView(APIView):
 
         reviewer = request.user
 
+        # -------------------------------------------------
+        # Create verification history record
+        # -------------------------------------------------
+
         verification = Verification.objects.create(
             document=document,
             reviewer=reviewer,
@@ -72,15 +106,21 @@ class DocumentVerificationView(APIView):
             comments=comments,
         )
 
+        # -------------------------------------------------
+        # Update current document status
+        # -------------------------------------------------
+
         if (
             verification_status
             == Verification.Status.APPROVED
         ):
+
             document.status = (
                 EmployeeDocument.Status.VERIFIED
             )
 
         else:
+
             document.status = (
                 EmployeeDocument.Status.REJECTED
             )
@@ -91,6 +131,10 @@ class DocumentVerificationView(APIView):
                 "updated_at",
             ]
         )
+
+        # -------------------------------------------------
+        # Recalculate travel-request document status
+        # -------------------------------------------------
 
         update_travel_request_document_status(
             document.travel_request
@@ -117,11 +161,39 @@ class DocumentVerificationHistoryView(APIView):
             id=document_id,
         )
 
+        # -------------------------------------------------
+        # Find all versions of this document type
+        # belonging to the same travel request.
+        #
+        # This preserves the audit trail when an
+        # employee replaces a rejected document.
+        # -------------------------------------------------
+
+        document_versions = (
+            EmployeeDocument.objects
+            .filter(
+                travel_request=document.travel_request,
+                document_type=document.document_type,
+            )
+            .order_by(
+                "-uploaded_at",
+                "-id",
+            )
+        )
+
         verifications = (
             Verification.objects
-            .filter(document=document)
-            .select_related("reviewer")
-            .order_by("-verified_at")
+            .filter(
+                document__in=document_versions
+            )
+            .select_related(
+                "reviewer",
+                "document",
+            )
+            .order_by(
+                "-verified_at",
+                "-id",
+            )
         )
 
         serializer = VerificationSerializer(

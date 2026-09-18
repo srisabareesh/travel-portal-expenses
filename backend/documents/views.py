@@ -5,7 +5,6 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 from rest_framework.generics import GenericAPIView
 from rest_framework.permissions import IsAuthenticated
-
 from rest_framework.parsers import (
     MultiPartParser,
     FormParser,
@@ -24,23 +23,70 @@ from .services import (
     update_travel_request_document_status,
     are_all_mandatory_documents_verified,
 )
+from users.permissions import IsEmployee
+
+
+def can_access_travel_request(user, travel_request):
+    """
+    Check whether the logged-in user can access
+    a specific travel request.
+
+    Rules:
+
+    EMPLOYEE:
+        Can access only their own request.
+
+    REVIEWER:
+        Can access reviewer workflow requests.
+
+    MANAGER:
+        Can access requests belonging to their team.
+
+    ADMIN:
+        Can access all requests.
+    """
+
+    if user.role == "ADMIN":
+        return True
+
+    if user.role == "EMPLOYEE":
+        return travel_request.employee == user
+
+    if user.role == "REVIEWER":
+        return travel_request.status in (
+            TravelRequest.Status.DOCUMENT_PENDING,
+            TravelRequest.Status.DOCUMENT_VERIFICATION,
+        )
+
+    if user.role == "MANAGER":
+        return travel_request.employee.manager == user
+
+    return False
 
 
 class TravelRequestDocumentChecklistView(APIView):
 
+    permission_classes = [IsAuthenticated]
+
     def get(self, request, travel_request_id):
 
-        try:
-            travel_request = TravelRequest.objects.get(
-                id=travel_request_id
-            )
+        travel_request = get_object_or_404(
+            TravelRequest,
+            id=travel_request_id,
+        )
 
-        except TravelRequest.DoesNotExist:
+        if not can_access_travel_request(
+            request.user,
+            travel_request,
+        ):
             return Response(
                 {
-                    "detail": "Travel request not found."
+                    "detail": (
+                        "You do not have permission "
+                        "to view this travel request."
+                    )
                 },
-                status=status.HTTP_404_NOT_FOUND,
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         checklist = get_document_checklist(
@@ -73,7 +119,10 @@ class EmployeeDocumentUploadView(GenericAPIView):
 
     serializer_class = EmployeeDocumentSerializer
 
-    permission_classes = [IsAuthenticated]
+    permission_classes = [
+        IsAuthenticated,
+        IsEmployee,
+    ]
 
     parser_classes = (
         MultiPartParser,
@@ -89,10 +138,7 @@ class EmployeeDocumentUploadView(GenericAPIView):
 
         # Employee can upload documents only
         # for their own travel requests.
-        if (
-            request.user.role == "EMPLOYEE"
-            and travel_request.employee != request.user
-        ):
+        if travel_request.employee != request.user:
             return Response(
                 {
                     "detail": (
@@ -168,7 +214,7 @@ class EmployeeDocumentUploadView(GenericAPIView):
             )
 
         # -------------------------------------------------
-        # 3. Check existing document
+        # 3. Check latest existing document
         # -------------------------------------------------
 
         existing_document = (
@@ -177,7 +223,10 @@ class EmployeeDocumentUploadView(GenericAPIView):
                 travel_request=travel_request,
                 document_type_id=document_type_id,
             )
-            .order_by("-uploaded_at")
+            .order_by(
+                "-uploaded_at",
+                "-id",
+            )
             .first()
         )
 
@@ -255,20 +304,19 @@ class EmployeeDocumentUploadView(GenericAPIView):
             # -------------------------------------------------
             # 5. Create a NEW document
             #
-            # Important:
-            # The old REJECTED document is NOT deleted.
+            # The old REJECTED document is preserved.
             # -------------------------------------------------
 
             document = serializer.save(
                 travel_request=travel_request,
-                uploaded_by=travel_request.employee,
+                uploaded_by=request.user,
                 status=(
                     EmployeeDocument.Status.PENDING_REVIEW
                 ),
             )
 
             # -------------------------------------------------
-            # 6. Recalculate travel request document status
+            # 6. Recalculate travel request status
             # -------------------------------------------------
 
             update_travel_request_document_status(

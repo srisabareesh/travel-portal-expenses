@@ -258,6 +258,29 @@ function ReviewerTravelRequestDetails() {
   };
 
   // --------------------------------------------------
+// File URL Helper
+// --------------------------------------------------
+
+const getFileUrl = (file) => {
+  if (!file) {
+    return null;
+  }
+
+  if (
+    file.startsWith("http://") ||
+    file.startsWith("https://")
+  ) {
+    return file;
+  }
+
+  const normalizedFile = file.startsWith("/")
+    ? file
+    : `/${file}`;
+
+  return `http://127.0.0.1:8000${normalizedFile}`;
+};
+
+  // --------------------------------------------------
   // Status Helpers
   // --------------------------------------------------
 
@@ -1037,14 +1060,13 @@ function ReviewerTravelRequestDetails() {
 
                         {document.file && (
                           <a
-                            href={
-                              document.file
-                            }
+                            href={getFileUrl(document.file)}
                             target="_blank"
                             rel="noreferrer"
                             style={{
-                              marginRight:
-                                "10px",
+                              marginRight: "10px",
+                              color: "#007bff",
+                              textDecoration: "none",
                             }}
                           >
                             View Document
@@ -1240,9 +1262,7 @@ function ReviewerTravelRequestDetails() {
               }}
             >
               <a
-                href={
-                  selectedDocument.file
-                }
+                href={getFileUrl(selectedDocument.file)}
                 target="_blank"
                 rel="noreferrer"
                 style={{
@@ -1256,6 +1276,7 @@ function ReviewerTravelRequestDetails() {
                     "5px",
                   textDecoration:
                     "none",
+                  color: "#007bff",
                 }}
               >
                 Open Document

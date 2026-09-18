@@ -1,9 +1,13 @@
 from rest_framework import serializers
-from .models import Country,TravelRequest
+
+from .models import Country, TravelRequest
+
 
 class CountrySerializer(serializers.ModelSerializer):
+
     class Meta:
-        model= Country
+        model = Country
+
         fields = (
             "id",
             "name",
@@ -11,7 +15,10 @@ class CountrySerializer(serializers.ModelSerializer):
             "is_active",
         )
 
-class TravelRequestSerializer(serializers.ModelSerializer):
+
+class TravelRequestSerializer(
+    serializers.ModelSerializer
+):
 
     employee_name = serializers.CharField(
         source="employee.get_full_name",
@@ -25,6 +32,7 @@ class TravelRequestSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = TravelRequest
+
         fields = (
             "id",
             "request_number",
@@ -50,4 +58,30 @@ class TravelRequestSerializer(serializers.ModelSerializer):
             "status",
             "created_at",
             "updated_at",
+        )
+
+    def validate(self, attrs):
+
+        start_date = attrs.get(
+            "start_date"
+        )
+
+        end_date = attrs.get(
+            "end_date"
+        )
+
+        if (
+            start_date is not None
+            and end_date is not None
+            and end_date < start_date
+        ):
+            raise serializers.ValidationError(
+                {
+                    "end_date": (
+                        "End date cannot be earlier "
+                        "than start date."
+                    )
+                }
             )
+
+        return attrs
