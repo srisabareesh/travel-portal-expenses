@@ -14,6 +14,9 @@ import TravelRequestDetails from "./pages/TravelRequestDetails";
 import UploadDocument from "./pages/UploadDocument";
 import ReviewerTravelRequests from "./pages/ReviewerTravelRequests";
 import ReviewerTravelRequestDetails from "./pages/ReviewerTravelRequestDetails";
+import ManagerDashboard from "./pages/ManagerDashboard";
+import ManagerTravelRequests from "./pages/ManagerTravelRequests";
+import ManagerTravelRequestDetails from "./pages/ManagerTravelRequestDetails";
 
 function App() {
   return (
@@ -91,6 +94,23 @@ function App() {
               <ReviewerTravelRequestDetails />
             </ProtectedRoute>
           }
+        />
+        <Route
+          path="/manager"
+          element={
+            <ProtectedRoute>
+              <ManagerDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/manager/travel-requests"
+          element={<ManagerTravelRequests />}
+        />
+
+        <Route
+          path="/manager/travel-requests/:id"
+          element={<ManagerTravelRequestDetails />}
         />
 
       </Routes>
