@@ -138,6 +138,8 @@ MAILERS = {
 }
 
 AUTH_USER_MODEL = "users.User"  ##tells  which User model your project should use for authentication.
+
+DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"  ##matches existing schema; removes models.W042 warnings
 MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR / "media"
 

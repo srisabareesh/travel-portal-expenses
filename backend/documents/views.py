@@ -46,19 +46,19 @@ def can_access_travel_request(user, travel_request):
         Can access all requests.
     """
 
-    if user.role == "ADMIN":
+    if user.has_role("ADMIN"):
         return True
 
-    if user.role == "EMPLOYEE":
+    if user.has_role("EMPLOYEE"):
         return travel_request.employee == user
 
-    if user.role == "REVIEWER":
+    if user.has_role("REVIEWER"):
         return travel_request.status in (
             TravelRequest.Status.DOCUMENT_PENDING,
             TravelRequest.Status.DOCUMENT_VERIFICATION,
         )
 
-    if user.role == "MANAGER":
+    if user.has_role("MANAGER"):
         return travel_request.employee.manager == user
 
     return False

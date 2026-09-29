@@ -33,10 +33,10 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
 
         user = self.request.user
 
-        if user.role == "ADMIN":
+        if user.has_role("ADMIN"):
             return TravelRequest.objects.all()
 
-        if user.role == "REVIEWER":
+        if user.has_role("REVIEWER"):
 
             workflow_requests = TravelRequest.objects.filter(
                 status__in=[
@@ -54,7 +54,7 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
                 | own_requests
             ).distinct()
 
-        if user.role == "MANAGER":
+        if user.has_role("MANAGER"):
 
             own_requests = TravelRequest.objects.filter(
                 employee=user
@@ -270,15 +270,13 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
             pk=pk,
         )
 
-        # Only Managers and Admins can approve.
-        if request.user.role not in (
-            "MANAGER",
-            "ADMIN",
-        ):
+        # Only explicitly-assigned Managers can approve.
+        # ADMIN alone does not grant approval authority.
+        if not request.user.has_role("MANAGER"):
             return Response(
                 {
                     "detail": (
-                        "Only managers or admins "
+                        "Only managers "
                         "can approve travel requests."
                     )
                 },
@@ -287,7 +285,7 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
 
         # A Manager cannot approve their own request.
         if (
-            request.user.role == "MANAGER"
+            request.user.has_role("MANAGER")
             and travel_request.employee == request.user
         ):
             return Response(
@@ -302,7 +300,7 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
 
         # A Manager can approve only requests
         # belonging to their team.
-        if request.user.role == "MANAGER":
+        if request.user.has_role("MANAGER"):
 
             if (
                 travel_request.employee.manager
@@ -382,15 +380,13 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
             pk=pk,
         )
 
-        # Only Managers and Admins can reject.
-        if request.user.role not in (
-            "MANAGER",
-            "ADMIN",
-        ):
+        # Only explicitly-assigned Managers can reject.
+        # ADMIN alone does not grant approval authority.
+        if not request.user.has_role("MANAGER"):
             return Response(
                 {
                     "detail": (
-                        "Only managers or admins "
+                        "Only managers "
                         "can reject travel requests."
                     )
                 },
@@ -399,7 +395,7 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
 
         # A Manager cannot reject their own request.
         if (
-            request.user.role == "MANAGER"
+            request.user.has_role("MANAGER")
             and travel_request.employee == request.user
         ):
             return Response(
@@ -414,7 +410,7 @@ class TravelRequestViewSet(viewsets.ModelViewSet):
 
         # A Manager can reject only requests
         # belonging to their team.
-        if request.user.role == "MANAGER":
+        if request.user.has_role("MANAGER"):
 
             if (
                 travel_request.employee.manager
