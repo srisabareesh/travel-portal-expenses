@@ -983,3 +983,537 @@ class TravelRequestApiCompatibilityTests(TestCase):
         self.assertTrue(
             response.data["travel_type_is_legacy"]
         )
+
+
+## -----------------------------------------------------------------
+## Phase 3.3: request status foundation
+## -----------------------------------------------------------------
+
+from .services import (
+    DOMESTIC_WORKFLOW,
+    INTERNATIONAL_WORKFLOW,
+    EXCEPTION_STATUSES,
+    LEGACY_STATUSES,
+    NEW_STATUSES,
+    STATUS_FAMILY_MAP,
+    is_exception_status,
+    is_legacy_status,
+    is_new_status,
+    status_family,
+    workflow_for,
+)
+
+
+LEGACY_STATUS_VALUES = (
+    "DRAFT",
+    "SUBMITTED",
+    "DOCUMENT_PENDING",
+    "DOCUMENT_VERIFICATION",
+    "APPROVED",
+    "REJECTED",
+    "CANCELLED",
+)
+
+NEW_STATUS_VALUES = (
+    "MANAGER_APPROVAL",
+    "MANAGER_APPROVED",
+    "TRAVEL_BOOKING",
+    "TRAVEL_BOOKED",
+    "TRAVEL_IN_PROGRESS",
+    "EXPENSE_SUBMISSION",
+    "EXPENSE_VERIFICATION",
+    "SETTLEMENT_PENDING",
+    "SETTLEMENT_APPROVAL",
+    "SETTLEMENT_APPROVED",
+    "SETTLEMENT_PROCESSING",
+    "COMPLETED",
+    "CLOSED",
+    "DOCUMENTS_PENDING",
+    "DOCUMENTS_UNDER_REVIEW",
+    "VISA_PROCESSING",
+    "VISA_APPROVED",
+    "REQUEST_REJECTED",
+    "REQUEST_CANCELLED",
+)
+
+EXPECTED_FAMILIES = {
+    "DOCUMENT_PENDING": "DOCUMENTS",
+    "DOCUMENTS_PENDING": "DOCUMENTS",
+    "DOCUMENT_VERIFICATION": "DOCUMENT_REVIEW",
+    "DOCUMENTS_UNDER_REVIEW": "DOCUMENT_REVIEW",
+    "APPROVED": "DECISION",
+    "MANAGER_APPROVED": "DECISION",
+    "REJECTED": "REJECTION",
+    "REQUEST_REJECTED": "REJECTION",
+    "CANCELLED": "CANCELLATION",
+    "REQUEST_CANCELLED": "CANCELLATION",
+}
+
+
+class StatusChoicesTests(TestCase):
+    """The final status vocabulary after Phase 3.3."""
+
+    def test_all_legacy_statuses_still_exist(self):
+
+        values = set(
+            TravelRequest.Status.values
+        )
+
+        for status in LEGACY_STATUS_VALUES:
+
+            self.assertIn(status, values)
+
+    def test_all_new_statuses_exist(self):
+
+        values = set(
+            TravelRequest.Status.values
+        )
+
+        for status in NEW_STATUS_VALUES:
+
+            self.assertIn(status, values)
+
+    def test_exactly_26_unique_status_values(self):
+
+        values = list(
+            TravelRequest.Status.values
+        )
+
+        self.assertEqual(
+            len(values),
+            26,
+        )
+
+        self.assertEqual(
+            len(set(values)),
+            26,
+        )
+
+    def test_no_duplicate_status_values(self):
+
+        values = list(
+            TravelRequest.Status.values
+        )
+
+        self.assertEqual(
+            len(values),
+            len(set(values)),
+        )
+
+    def test_draft_remains_the_default(self):
+
+        field = (
+            TravelRequest._meta.get_field(
+                "status"
+            )
+        )
+
+        self.assertEqual(
+            field.default,
+            "DRAFT",
+        )
+
+    def test_max_length_remains_30(self):
+
+        field = (
+            TravelRequest._meta.get_field(
+                "status"
+            )
+        )
+
+        self.assertEqual(
+            field.max_length,
+            30,
+        )
+
+    def test_legacy_statuses_are_unchanged(self):
+        ##The first seven choices must be exactly the
+        ##legacy vocabulary, in the original order.
+
+        self.assertEqual(
+            tuple(
+                TravelRequest.Status.values
+            )[:7],
+            LEGACY_STATUS_VALUES,
+        )
+
+
+class StatusHelperTests(TestCase):
+    """Central legacy/new status classification helpers."""
+
+    def test_is_legacy_status(self):
+
+        for status in LEGACY_STATUS_VALUES:
+
+            self.assertTrue(
+                is_legacy_status(status)
+            )
+
+        for status in NEW_STATUS_VALUES:
+
+            self.assertFalse(
+                is_legacy_status(status)
+            )
+
+    def test_is_new_status(self):
+
+        for status in NEW_STATUS_VALUES:
+
+            self.assertTrue(
+                is_new_status(status)
+            )
+
+        for status in LEGACY_STATUS_VALUES:
+
+            self.assertFalse(
+                is_new_status(status)
+            )
+
+    def test_helper_sets_are_disjoint(self):
+
+        self.assertEqual(
+            LEGACY_STATUSES
+            & NEW_STATUSES,
+            set(),
+        )
+
+    def test_helper_sets_cover_every_choice(self):
+
+        self.assertEqual(
+            LEGACY_STATUSES | NEW_STATUSES,
+            set(TravelRequest.Status.values),
+        )
+
+
+class StatusFamilyTests(TestCase):
+    """Legacy/new equivalence classification."""
+
+    def test_equivalent_statuses_share_a_family(self):
+
+        for status, family in (
+            EXPECTED_FAMILIES.items()
+        ):
+
+            self.assertEqual(
+                status_family(status),
+                family,
+            )
+
+    def test_family_mapping_covers_equivalences(self):
+
+        self.assertEqual(
+            STATUS_FAMILY_MAP,
+            EXPECTED_FAMILIES,
+        )
+
+    def test_unknown_status_has_no_family(self):
+
+        self.assertIsNone(
+            status_family("NOT_A_STATUS")
+        )
+
+    def test_lifecycle_statuses_have_no_family(self):
+        ##Only equivalence pairs get a family; ordinary
+        ##lifecycle statuses do not participate.
+
+        for status in (
+            "DRAFT",
+            "SUBMITTED",
+            "MANAGER_APPROVAL",
+            "TRAVEL_BOOKING",
+            "SETTLEMENT_PENDING",
+            "COMPLETED",
+            "CLOSED",
+            "VISA_PROCESSING",
+        ):
+
+            self.assertIsNone(
+                status_family(status)
+            )
+
+    def test_exception_status_detection(self):
+
+        self.assertTrue(
+            is_exception_status("REJECTED")
+        )
+
+        self.assertTrue(
+            is_exception_status(
+                "REQUEST_REJECTED"
+            )
+        )
+
+        self.assertTrue(
+            is_exception_status("CANCELLED")
+        )
+
+        self.assertTrue(
+            is_exception_status(
+                "REQUEST_CANCELLED"
+            )
+        )
+
+        self.assertFalse(
+            is_exception_status("APPROVED")
+        )
+
+        self.assertFalse(
+            is_exception_status(
+                "MANAGER_APPROVED"
+            )
+        )
+
+        self.assertFalse(
+            is_exception_status("DRAFT")
+        )
+
+    def test_exception_statuses_tuple(self):
+
+        self.assertEqual(
+            set(EXCEPTION_STATUSES),
+            {
+                "REQUEST_REJECTED",
+                "REQUEST_CANCELLED",
+            },
+        )
+
+
+class WorkflowDefinitionTests(TestCase):
+    """Declarative lifecycle definitions for later phases."""
+
+    def test_domestic_workflow_definition(self):
+
+        self.assertEqual(
+            list(DOMESTIC_WORKFLOW),
+            [
+                "DRAFT",
+                "SUBMITTED",
+                "MANAGER_APPROVAL",
+                "MANAGER_APPROVED",
+                "TRAVEL_BOOKING",
+                "TRAVEL_BOOKED",
+                "TRAVEL_IN_PROGRESS",
+                "EXPENSE_SUBMISSION",
+                "EXPENSE_VERIFICATION",
+                "SETTLEMENT_PENDING",
+                "SETTLEMENT_APPROVAL",
+                "SETTLEMENT_APPROVED",
+                "SETTLEMENT_PROCESSING",
+                "COMPLETED",
+                "CLOSED",
+            ],
+        )
+
+    def test_international_workflow_definition(self):
+
+        self.assertEqual(
+            list(INTERNATIONAL_WORKFLOW),
+            [
+                "DRAFT",
+                "SUBMITTED",
+                "DOCUMENTS_PENDING",
+                "DOCUMENTS_UNDER_REVIEW",
+                "MANAGER_APPROVAL",
+                "MANAGER_APPROVED",
+                "VISA_PROCESSING",
+                "VISA_APPROVED",
+                "TRAVEL_BOOKING",
+                "TRAVEL_BOOKED",
+                "TRAVEL_IN_PROGRESS",
+                "EXPENSE_SUBMISSION",
+                "EXPENSE_VERIFICATION",
+                "SETTLEMENT_PENDING",
+                "SETTLEMENT_APPROVAL",
+                "SETTLEMENT_APPROVED",
+                "SETTLEMENT_PROCESSING",
+                "COMPLETED",
+                "CLOSED",
+            ],
+        )
+
+    def test_workflows_contain_no_duplicate_statuses(self):
+
+        self.assertEqual(
+            len(DOMESTIC_WORKFLOW),
+            len(set(DOMESTIC_WORKFLOW)),
+        )
+
+        self.assertEqual(
+            len(INTERNATIONAL_WORKFLOW),
+            len(
+                set(
+                    INTERNATIONAL_WORKFLOW
+                )
+            ),
+        )
+
+    def test_workflows_only_use_valid_choices(self):
+
+        values = set(
+            TravelRequest.Status.values
+        )
+
+        self.assertTrue(
+            set(DOMESTIC_WORKFLOW).issubset(
+                values
+            )
+        )
+
+        self.assertTrue(
+            set(
+                INTERNATIONAL_WORKFLOW
+            ).issubset(values)
+        )
+
+    def test_workflows_share_prefix_and_suffix(self):
+        ##Both workflows start at DRAFT->SUBMITTED and
+        ##end with the same settlement/completion tail.
+
+        self.assertEqual(
+            DOMESTIC_WORKFLOW[:2],
+            INTERNATIONAL_WORKFLOW[:2],
+        )
+
+        self.assertEqual(
+            DOMESTIC_WORKFLOW[-7:],
+            INTERNATIONAL_WORKFLOW[-7:],
+        )
+
+    def test_international_extends_domestic_with_unique_statuses(self):
+
+        self.assertEqual(
+            set(INTERNATIONAL_WORKFLOW)
+            - set(DOMESTIC_WORKFLOW),
+            {
+                "DOCUMENTS_PENDING",
+                "DOCUMENTS_UNDER_REVIEW",
+                "VISA_PROCESSING",
+                "VISA_APPROVED",
+            },
+        )
+
+    def test_workflow_for_travel_type(self):
+
+        self.assertEqual(
+            workflow_for("DOMESTIC"),
+            DOMESTIC_WORKFLOW,
+        )
+
+        self.assertEqual(
+            workflow_for("INTERNATIONAL"),
+            INTERNATIONAL_WORKFLOW,
+        )
+
+        self.assertIsNone(
+            workflow_for("BUSINESS")
+        )
+
+
+class StatusPersistenceTests(TestCase):
+    """Stored statuses survive untouched: no conversion."""
+
+    def setUp(self):
+
+        self.country = Country.objects.create(
+            name="Status Land",
+            country_code="ST",
+        )
+
+    def _create_request(self, status, suffix):
+
+        user = User.objects.create_user(
+            username=f"status-employee-{suffix}",
+            password="TestPassword123",
+        )
+
+        return TravelRequest.objects.create(
+            employee=user,
+            destination_country=self.country,
+            destination_city="Status City",
+            travel_type="BUSINESS",
+            start_date=date(2026, 5, 1),
+            end_date=date(2026, 5, 5),
+            purpose="Status persistence test",
+            status=status,
+        )
+
+    def test_legacy_statuses_persist_unchanged(self):
+
+        for status in LEGACY_STATUS_VALUES:
+
+            travel_request = self._create_request(
+                status,
+                status.lower(),
+            )
+
+            travel_request.refresh_from_db()
+
+            self.assertEqual(
+                travel_request.status,
+                status,
+            )
+
+    def test_new_statuses_persist_unchanged(self):
+
+        for status in NEW_STATUS_VALUES:
+
+            travel_request = self._create_request(
+                status,
+                status.lower(),
+            )
+
+            travel_request.refresh_from_db()
+
+            self.assertEqual(
+                travel_request.status,
+                status,
+            )
+
+    def test_existing_legacy_request_is_not_converted(self):
+        ##Simulates a historical record: repeated
+        ##load/save cycles must never change its status.
+
+        travel_request = self._create_request(
+            "DOCUMENT_VERIFICATION",
+            "no-conversion",
+        )
+
+        for _ in range(3):
+
+            travel_request.save()
+
+            travel_request.refresh_from_db()
+
+            self.assertEqual(
+                travel_request.status,
+                "DOCUMENT_VERIFICATION",
+            )
+
+            self.assertNotEqual(
+                travel_request.status,
+                "DOCUMENTS_UNDER_REVIEW",
+            )
+
+    def test_default_status_is_draft_for_new_records(self):
+
+        user = User.objects.create_user(
+            username="status-default-employee",
+            password="TestPassword123",
+        )
+
+        travel_request = TravelRequest.objects.create(
+            employee=user,
+            destination_country=self.country,
+            destination_city="Default City",
+            travel_type="DOMESTIC",
+            start_date=date(2026, 6, 1),
+            end_date=date(2026, 6, 5),
+            purpose="Default status test",
+        )
+
+        travel_request.refresh_from_db()
+
+        self.assertEqual(
+            travel_request.status,
+            "DRAFT",
+        )

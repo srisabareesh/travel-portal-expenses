@@ -47,6 +47,10 @@ class TravelRequest(models.Model):
         INTERNATIONAL = "INTERNATIONAL", "International"
 
     class Status(models.TextChoices):
+        # -------------------------------------------------
+        # Legacy status values (historical records keep
+        # using these; they are never converted).
+        # -------------------------------------------------
         DRAFT = "DRAFT", "Draft"
         SUBMITTED = "SUBMITTED", "Submitted"
         DOCUMENT_PENDING = "DOCUMENT_PENDING", "Document Pending"
@@ -54,6 +58,35 @@ class TravelRequest(models.Model):
         APPROVED = "APPROVED", "Approved"
         REJECTED = "REJECTED", "Rejected"
         CANCELLED = "CANCELLED", "Cancelled"
+
+        # -------------------------------------------------
+        # Phase 3.3: new workflow statuses.
+        # DRAFT and SUBMITTED are shared by both workflows
+        # and intentionally defined only once (above).
+        # -------------------------------------------------
+        MANAGER_APPROVAL = "MANAGER_APPROVAL", "Manager Approval"
+        MANAGER_APPROVED = "MANAGER_APPROVED", "Manager Approved"
+        TRAVEL_BOOKING = "TRAVEL_BOOKING", "Travel Booking"
+        TRAVEL_BOOKED = "TRAVEL_BOOKED", "Travel Booked"
+        TRAVEL_IN_PROGRESS = "TRAVEL_IN_PROGRESS", "Travel In Progress"
+        EXPENSE_SUBMISSION = "EXPENSE_SUBMISSION", "Expense Submission"
+        EXPENSE_VERIFICATION = "EXPENSE_VERIFICATION", "Expense Verification"
+        SETTLEMENT_PENDING = "SETTLEMENT_PENDING", "Settlement Pending"
+        SETTLEMENT_APPROVAL = "SETTLEMENT_APPROVAL", "Settlement Approval"
+        SETTLEMENT_APPROVED = "SETTLEMENT_APPROVED", "Settlement Approved"
+        SETTLEMENT_PROCESSING = "SETTLEMENT_PROCESSING", "Settlement Processing"
+        COMPLETED = "COMPLETED", "Completed"
+        CLOSED = "CLOSED", "Closed"
+
+        # International-specific statuses.
+        DOCUMENTS_PENDING = "DOCUMENTS_PENDING", "Documents Pending"
+        DOCUMENTS_UNDER_REVIEW = "DOCUMENTS_UNDER_REVIEW", "Documents Under Review"
+        VISA_PROCESSING = "VISA_PROCESSING", "Visa Processing"
+        VISA_APPROVED = "VISA_APPROVED", "Visa Approved"
+
+        # Exception statuses.
+        REQUEST_REJECTED = "REQUEST_REJECTED", "Request Rejected"
+        REQUEST_CANCELLED = "REQUEST_CANCELLED", "Request Cancelled"
     request_number = models.CharField(
         max_length=20,
         unique=True,
