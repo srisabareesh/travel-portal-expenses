@@ -3,6 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import apiClient from "../api/client";
 
+import WorkflowProgress from "../components/WorkflowProgress";
+import TravelSections from "../components/TravelSections";
+
 
 function ManagerTravelRequestDetails() {
   const { id } = useParams();
@@ -73,7 +76,8 @@ function ManagerTravelRequestDetails() {
 
 
   useEffect(() => {
-    loadDetails();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void loadDetails();
   }, [id]);
 
 
@@ -1305,6 +1309,12 @@ function ManagerTravelRequestDetails() {
         </div>
 
       </div>
+
+      <WorkflowProgress
+        travelRequestId={id}
+      />
+
+      <TravelSections travelRequestId={id} />
 
     </div>
   );

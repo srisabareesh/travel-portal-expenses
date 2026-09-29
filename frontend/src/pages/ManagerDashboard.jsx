@@ -1,5 +1,7 @@
 import { useNavigate } from "react-router-dom";
 
+import NotificationList from "../components/NotificationList";
+
 function ManagerDashboard() {
   const navigate = useNavigate();
 
@@ -82,6 +84,8 @@ function ManagerDashboard() {
             </p>
           </div>
         </div>
+
+        <NotificationList />
       </div>
     </div>
   );

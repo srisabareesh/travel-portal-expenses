@@ -1,13 +1,8 @@
-import {
-  createContext,
-  useContext,
-  useEffect,
-  useState,
-} from "react";
+import { useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 
-const AuthContext = createContext(null);
+import { AuthContext } from "./authContext";
 
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(
@@ -85,7 +80,8 @@ export function AuthProvider({ children }) {
       localStorage.getItem("access_token");
 
     if (token) {
-      fetchCurrentUser();
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- bootstraps auth state once on mount
+      void fetchCurrentUser();
     } else {
       setLoading(false);
     }
@@ -104,8 +100,4 @@ export function AuthProvider({ children }) {
       {children}
     </AuthContext.Provider>
   );
-}
-
-export function useAuth() {
-  return useContext(AuthContext);
 }

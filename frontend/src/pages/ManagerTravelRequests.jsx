@@ -50,7 +50,8 @@ function ManagerTravelRequests() {
 
 
   useEffect(() => {
-    loadTravelRequests();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void loadTravelRequests();
   }, []);
 
 
@@ -76,6 +77,63 @@ function ManagerTravelRequests() {
 
       case "CANCELLED":
         return "Cancelled";
+
+      case "MANAGER_APPROVAL":
+        return "Manager Approval";
+
+      case "MANAGER_APPROVED":
+        return "Manager Approved";
+
+      case "DOCUMENTS_PENDING":
+        return "Documents Pending";
+
+      case "DOCUMENTS_UNDER_REVIEW":
+        return "Documents Under Review";
+
+      case "VISA_PROCESSING":
+        return "Visa Processing";
+
+      case "VISA_APPROVED":
+        return "Visa Approved";
+
+      case "TRAVEL_BOOKING":
+        return "Travel Booking";
+
+      case "TRAVEL_BOOKED":
+        return "Travel Booked";
+
+      case "TRAVEL_IN_PROGRESS":
+        return "Travel In Progress";
+
+      case "EXPENSE_SUBMISSION":
+        return "Expense Submission";
+
+      case "EXPENSE_VERIFICATION":
+        return "Expense Verification";
+
+      case "SETTLEMENT_PENDING":
+        return "Settlement Pending";
+
+      case "SETTLEMENT_APPROVAL":
+        return "Settlement Approval";
+
+      case "SETTLEMENT_APPROVED":
+        return "Settlement Approved";
+
+      case "SETTLEMENT_PROCESSING":
+        return "Settlement Processing";
+
+      case "COMPLETED":
+        return "Completed";
+
+      case "CLOSED":
+        return "Closed";
+
+      case "REQUEST_REJECTED":
+        return "Request Rejected";
+
+      case "REQUEST_CANCELLED":
+        return "Request Cancelled";
 
       default:
         return status || "-";

@@ -56,6 +56,26 @@ urlpatterns = [
     ),
 
     path(
+        "api/",
+        include("visa.urls"),
+    ),
+
+    path(
+        "api/",
+        include("bookings.urls"),
+    ),
+
+    path(
+        "api/",
+        include("expenses.urls"),
+    ),
+
+    path(
+        "api/",
+        include("notifications.urls"),
+    ),
+
+    path(
     "api/auth/me/",
     CurrentUserView.as_view(),
     name="current-user",

@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/client";
 
+import WorkflowProgress from "../components/WorkflowProgress";
+import TravelSections from "../components/TravelSections";
+
 function ReviewerTravelRequestDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -129,7 +132,8 @@ function ReviewerTravelRequestDetails() {
   };
 
   useEffect(() => {
-    fetchData();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchData();
   }, [id]);
 
   // --------------------------------------------------
@@ -1666,6 +1670,12 @@ const getFileUrl = (file) => {
           Back to Reviewer Requests
         </button>
       </div>
+
+      <WorkflowProgress
+        travelRequestId={id}
+      />
+
+      <TravelSections travelRequestId={id} />
 
     </div>
   );

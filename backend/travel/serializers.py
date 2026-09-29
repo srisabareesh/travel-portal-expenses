@@ -198,6 +198,56 @@ class TravelRequestSerializer(
             "end_date"
         )
 
+        if self.instance is not None:
+
+            ##Phase 3.4: validate the effective date pair.
+            ##When only one date is supplied (partial
+            ##update), the other falls back to the stored
+            ##value so a PATCH cannot make the pair
+            ##incoherent. When neither date is supplied,
+            ##historical records are not forced through
+            ##date validation.
+            if start_date is None:
+
+                start_date = (
+                    self.instance.start_date
+                )
+
+            if end_date is None:
+
+                end_date = (
+                    self.instance.end_date
+                )
+
+            dates_touched = (
+                "start_date" in attrs
+                or "end_date" in attrs
+            )
+
+            if not dates_touched:
+
+                return attrs
+
+        elif start_date is None:
+
+            raise serializers.ValidationError(
+                {
+                    "start_date": (
+                        "This field is required."
+                    )
+                }
+            )
+
+        elif end_date is None:
+
+            raise serializers.ValidationError(
+                {
+                    "end_date": (
+                        "This field is required."
+                    )
+                }
+            )
+
         if (
             start_date is not None
             and end_date is not None

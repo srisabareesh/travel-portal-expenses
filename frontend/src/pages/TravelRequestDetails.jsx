@@ -2,6 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/client";
 
+import WorkflowProgress from "../components/WorkflowProgress";
+import TravelSections from "../components/TravelSections";
+
 function TravelRequestDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
@@ -11,10 +14,6 @@ function TravelRequestDetails() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  useEffect(() => {
-    fetchTravelRequestDetails();
-  }, [id]);
 
   // --------------------------------
   // Fetch Travel Request + Checklist
@@ -80,6 +79,11 @@ function TravelRequestDetails() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchTravelRequestDetails();
+  }, [id]);
+
   // --------------------------------
   // Request Status
   // --------------------------------
@@ -93,6 +97,25 @@ function TravelRequestDetails() {
       APPROVED: "Approved",
       REJECTED: "Rejected",
       CANCELLED: "Cancelled",
+      MANAGER_APPROVAL: "Manager Approval",
+      MANAGER_APPROVED: "Manager Approved",
+      DOCUMENTS_PENDING: "Documents Pending",
+      DOCUMENTS_UNDER_REVIEW: "Documents Under Review",
+      VISA_PROCESSING: "Visa Processing",
+      VISA_APPROVED: "Visa Approved",
+      TRAVEL_BOOKING: "Travel Booking",
+      TRAVEL_BOOKED: "Travel Booked",
+      TRAVEL_IN_PROGRESS: "Travel In Progress",
+      EXPENSE_SUBMISSION: "Expense Submission",
+      EXPENSE_VERIFICATION: "Expense Verification",
+      SETTLEMENT_PENDING: "Settlement Pending",
+      SETTLEMENT_APPROVAL: "Settlement Approval",
+      SETTLEMENT_APPROVED: "Settlement Approved",
+      SETTLEMENT_PROCESSING: "Settlement Processing",
+      COMPLETED: "Completed",
+      CLOSED: "Closed",
+      REQUEST_REJECTED: "Request Rejected",
+      REQUEST_CANCELLED: "Request Cancelled",
     };
 
     return statusLabels[status] || status || "-";
@@ -669,6 +692,18 @@ function TravelRequestDetails() {
           </div>
         )}
       </div>
+
+      {/* -------------------------------- */}
+      {/* -------------------------------- */}
+      {/* Workflow progress + business sections (Phase 16/17) */}
+      {/* -------------------------------- */}
+
+      <WorkflowProgress
+        travelRequestId={id}
+        onChanged={fetchTravelRequestDetails}
+      />
+
+      <TravelSections travelRequestId={id} />
 
       {/* -------------------------------- */}
       {/* Refresh */}

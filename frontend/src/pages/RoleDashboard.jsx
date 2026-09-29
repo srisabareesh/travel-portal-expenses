@@ -1,8 +1,10 @@
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 
 import EmployeeDashboard from "./EmployeeDashboard";
 import ReviewerDashboard from "./ReviewerDashboard";
-
+import ManagerDashboard from "./ManagerDashboard";
+import AdminDashboard from "./AdminDashboard";
+import { hasAnyRole } from "../utils/roles";
 
 function RoleDashboard() {
   const { user, loading } = useAuth();
@@ -24,48 +26,43 @@ function RoleDashboard() {
     );
   }
 
-  // Employee
-  if (user.role === "EMPLOYEE") {
-    return <EmployeeDashboard />;
+  const views = [];
+
+  // A user may hold several roles: render every relevant
+  // dashboard. EMPLOYEE first (personal work), then the
+  // business queues. ADMIN alone (no business role) sees
+  // only the admin console.
+  if (hasAnyRole(user, ["EMPLOYEE"])) {
+    views.push(<EmployeeDashboard key="employee" />);
   }
 
-  // Reviewer
-  if (user.role === "REVIEWER") {
-    return <ReviewerDashboard />;
+  if (hasAnyRole(user, ["REVIEWER"])) {
+    views.push(<ReviewerDashboard key="reviewer" />);
   }
 
-  // Manager
-  if (user.role === "MANAGER") {
+  if (hasAnyRole(user, ["MANAGER"])) {
+    views.push(<ManagerDashboard key="manager" />);
+  }
+
+  if (hasAnyRole(user, ["ADMIN"])) {
+    views.push(<AdminDashboard key="admin" />);
+  }
+
+  if (views.length === 0) {
     return (
       <div style={{ padding: "30px" }}>
-        <h1>Manager Dashboard</h1>
-        <p>Welcome to the Manager Dashboard.</p>
+        <h1>Dashboard</h1>
+        <p>
+          Your roles (
+          {(user.roles || [user.role]).join(", ") ||
+            "none"}
+          ) do not map to a dashboard.
+        </p>
       </div>
     );
   }
 
-  // Admin
-  if (user.role === "ADMIN") {
-    return (
-      <div style={{ padding: "30px" }}>
-        <h1>Admin Dashboard</h1>
-        <p>Welcome to the Admin Dashboard.</p>
-      </div>
-    );
-  }
-
-  // Unknown role
-  return (
-    <div style={{ padding: "30px" }}>
-      <h1>Dashboard</h1>
-      <p>
-        Your user role could not be determined.
-      </p>
-      <p>
-        Current role: {user.role || "No role returned"}
-      </p>
-    </div>
-  );
+  return <div>{views}</div>;
 }
 
 export default RoleDashboard;

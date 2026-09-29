@@ -9,10 +9,6 @@ function ReviewerTravelRequests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  useEffect(() => {
-    fetchTravelRequests();
-  }, []);
-
   const fetchTravelRequests = async () => {
     try {
       setLoading(true);
@@ -44,6 +40,11 @@ function ReviewerTravelRequests() {
     }
   };
 
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchTravelRequests();
+  }, []);
+
   const getStatusLabel = (status) => {
     const statusLabels = {
       DRAFT: "Draft",
@@ -54,6 +55,25 @@ function ReviewerTravelRequests() {
       APPROVED: "Approved",
       REJECTED: "Rejected",
       CANCELLED: "Cancelled",
+      MANAGER_APPROVAL: "Manager Approval",
+      MANAGER_APPROVED: "Manager Approved",
+      DOCUMENTS_PENDING: "Documents Pending",
+      DOCUMENTS_UNDER_REVIEW: "Documents Under Review",
+      VISA_PROCESSING: "Visa Processing",
+      VISA_APPROVED: "Visa Approved",
+      TRAVEL_BOOKING: "Travel Booking",
+      TRAVEL_BOOKED: "Travel Booked",
+      TRAVEL_IN_PROGRESS: "Travel In Progress",
+      EXPENSE_SUBMISSION: "Expense Submission",
+      EXPENSE_VERIFICATION: "Expense Verification",
+      SETTLEMENT_PENDING: "Settlement Pending",
+      SETTLEMENT_APPROVAL: "Settlement Approval",
+      SETTLEMENT_APPROVED: "Settlement Approved",
+      SETTLEMENT_PROCESSING: "Settlement Processing",
+      COMPLETED: "Completed",
+      CLOSED: "Closed",
+      REQUEST_REJECTED: "Request Rejected",
+      REQUEST_CANCELLED: "Request Cancelled",
     };
 
     return statusLabels[status] || status;

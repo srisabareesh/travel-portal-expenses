@@ -46,7 +46,11 @@ INSTALLED_APPS = [
     'travel',
     'documents',
     'verification',
-    
+    'visa',
+    'bookings',
+    'expenses',
+    'notifications',
+    'audit',
 ]
 
 MIDDLEWARE = [
@@ -57,8 +61,16 @@ MIDDLEWARE = [
     'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'corsheaders.middleware.CorsMiddleware',
 ]
+
+# django-cors-headers must run as early as possible so CORS
+# responses are produced before any view/middleware logic.
+MIDDLEWARE.insert(
+    MIDDLEWARE.index(
+        'django.middleware.security.SecurityMiddleware'
+    ) + 1,
+    'corsheaders.middleware.CorsMiddleware',
+)
 
 ROOT_URLCONF = 'config.urls'
 

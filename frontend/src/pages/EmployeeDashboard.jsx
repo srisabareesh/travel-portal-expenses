@@ -1,5 +1,7 @@
-import { useAuth } from "../context/AuthContext";
+import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
+
+import NotificationList from "../components/NotificationList";
 
 function EmployeeDashboard() {
   const { user, logout } = useAuth();
@@ -53,6 +55,8 @@ function EmployeeDashboard() {
       </div>
 
       <hr />
+
+      <NotificationList />
 
       <button onClick={logout}>
         Logout

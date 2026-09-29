@@ -1,3 +1,7 @@
+from travel.services import (
+    is_legacy_status,
+)
+
 from .models import DocumentRequirement
 
 
@@ -224,29 +228,50 @@ def update_travel_request_document_status(
         ):
             has_pending_review = True
 
-    if has_missing:
+    ##Phase 3.9: requests that entered the new workflow
+    ##use the new document statuses; requests that still
+    ##carry a legacy status (historical records) keep
+    ##receiving legacy document statuses. Nothing is
+    ##converted: each vocabulary stays self-consistent.
+    use_new_vocabulary = not is_legacy_status(
+        travel_request.status
+    )
 
-        new_status = (
-            travel_request.Status.DOCUMENT_PENDING
+    if use_new_vocabulary:
+
+        pending_status = (
+            travel_request.Status.DOCUMENTS_PENDING
         )
 
-    elif has_pending_review:
-
-        new_status = (
-            travel_request.Status.DOCUMENT_VERIFICATION
-        )
-
-    elif has_rejected:
-
-        new_status = (
-            travel_request.Status.DOCUMENT_VERIFICATION
+        review_status = (
+            travel_request.Status.DOCUMENTS_UNDER_REVIEW
         )
 
     else:
 
-        new_status = (
+        pending_status = (
+            travel_request.Status.DOCUMENT_PENDING
+        )
+
+        review_status = (
             travel_request.Status.DOCUMENT_VERIFICATION
         )
+
+    if has_missing:
+
+        new_status = pending_status
+
+    elif has_pending_review:
+
+        new_status = review_status
+
+    elif has_rejected:
+
+        new_status = review_status
+
+    else:
+
+        new_status = review_status
 
     if (
         travel_request.status
