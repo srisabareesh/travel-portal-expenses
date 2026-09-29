@@ -614,3 +614,102 @@ class ManagerApprovalAuthorizationTests(TestCase):
 
         self.assertEqual(response.status_code, 400)
         self.assertIn("detail", response.data)
+
+
+class LegacyTravelTypeRoleRegressionTests(TestCase):
+    """
+    Phase 3.2: Phase 2 role/permission behavior must keep
+    working for records that carry a historical travel type.
+    """
+
+    def setUp(self):
+        ensure_roles_seeded()
+
+        self.country = Country.objects.create(
+            name="Regression Land",
+            country_code="RL",
+        )
+
+        self.employee = User.objects.create_user(
+            username="emp_legacy",
+            password="TestPassword123",
+            role="EMPLOYEE",
+        )
+        self.team_manager = User.objects.create_user(
+            username="mgr_legacy",
+            password="TestPassword123",
+            role="MANAGER",
+        )
+        self.other_manager = User.objects.create_user(
+            username="mgr_legacy_other",
+            password="TestPassword123",
+            role="MANAGER",
+        )
+
+        self.employee.manager = self.team_manager
+        self.employee.save()
+
+        self.legacy_request = TravelRequest.objects.create(
+            employee=self.employee,
+            destination_country=self.country,
+            destination_city="Legacy Town",
+            travel_type=TravelRequest.TravelType.BUSINESS,
+            start_date="2026-10-01",
+            end_date="2026-10-05",
+            purpose="Historical role regression",
+        )
+
+    def _auth(self, user):
+        from rest_framework_simplejwt.tokens import RefreshToken
+
+        return f"Bearer {RefreshToken.for_user(user).access_token}"
+
+    def test_manager_can_view_team_legacy_request(self):
+
+        response = self.client.get(
+            f"/api/travel-requests/{self.legacy_request.pk}/",
+            HTTP_AUTHORIZATION=self._auth(self.team_manager),
+        )
+
+        self.assertEqual(response.status_code, 200)
+
+        self.assertEqual(
+            response.data["travel_type"],
+            "BUSINESS",
+        )
+
+        self.assertTrue(
+            response.data["travel_type_is_legacy"]
+        )
+
+    def test_other_manager_cannot_view_legacy_request(self):
+
+        response = self.client.get(
+            f"/api/travel-requests/{self.legacy_request.pk}/",
+            HTTP_AUTHORIZATION=self._auth(self.other_manager),
+        )
+
+        self.assertEqual(response.status_code, 404)
+
+    def test_approve_authorization_unchanged_for_legacy_request(self):
+
+        response = self.client.post(
+            f"/api/travel-requests/{self.legacy_request.pk}/approve/",
+            HTTP_AUTHORIZATION=self._auth(self.team_manager),
+        )
+
+        ##The team manager passes authorization and is
+        ##rejected only on workflow status (request is
+        ##DRAFT, not DOCUMENT_VERIFICATION).
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("detail", response.data)
+
+        self.other_manager_response = self.client.post(
+            f"/api/travel-requests/{self.legacy_request.pk}/approve/",
+            HTTP_AUTHORIZATION=self._auth(self.other_manager),
+        )
+
+        self.assertEqual(
+            self.other_manager_response.status_code,
+            403,
+        )

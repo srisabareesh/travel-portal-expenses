@@ -231,3 +231,44 @@ class DocumentRequirementNewTravelTypesTest(TestCase):
             checklist,
             [],
         )
+
+    def test_legacy_request_checklist_behavior_unchanged(self):
+        ##A historical BUSINESS request keeps getting its
+        ##legacy BUSINESS requirements: the new travel
+        ##types do not affect existing document matching.
+
+        legacy_country = Country.objects.create(
+            name="Legacy Doc Land",
+            country_code="LD",
+        )
+
+        legacy_doc = DocumentType.objects.create(
+            name="Legacy Doc",
+        )
+
+        DocumentRequirement.objects.create(
+            country=legacy_country,
+            document_type=legacy_doc,
+            travel_type="BUSINESS",
+            mandatory=True,
+        )
+
+        travel_request = self._make_travel_request(
+            legacy_country,
+            "BUSINESS",
+            "legacy-doc-employee",
+        )
+
+        checklist = get_document_checklist(
+            travel_request
+        )
+
+        document_names = {
+            item["document_type"]
+            for item in checklist
+        }
+
+        self.assertEqual(
+            document_names,
+            {"Legacy Doc"},
+        )

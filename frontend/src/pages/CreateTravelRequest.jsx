@@ -12,7 +12,7 @@ function CreateTravelRequest() {
     destination_city: "",
     client: "",
     project: "",
-    travel_type: "BUSINESS",
+    travel_type: "",
     start_date: "",
     end_date: "",
     purpose: "",
@@ -177,20 +177,16 @@ function CreateTravelRequest() {
             onChange={handleChange}
             required
           >
-            <option value="BUSINESS">
-              Business
+            <option value="" disabled>
+              Select Travel Type
             </option>
 
-            <option value="TRAINING">
-              Training
+            <option value="DOMESTIC">
+              Domestic
             </option>
 
-            <option value="PROJECT">
-              Project
-            </option>
-
-            <option value="OTHER">
-              Other
+            <option value="INTERNATIONAL">
+              International
             </option>
           </select>
         </div>
