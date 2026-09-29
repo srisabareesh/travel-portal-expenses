@@ -1,5 +1,6 @@
 import { Navigate } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
+import { LoadingState } from "../components/ui";
 
 function ProtectedRoute({ children }) {
   const {
@@ -8,7 +9,7 @@ function ProtectedRoute({ children }) {
   } = useAuth();
 
   if (loading) {
-    return <div>Loading...</div>;
+    return <LoadingState label="Checking your session…" />;
   }
 
   if (!isAuthenticated) {

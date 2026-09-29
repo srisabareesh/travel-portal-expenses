@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import apiClient from "../api/client";
+import { Card, Button } from "./ui";
 
 /**
  * WorkflowProgress — Phase 17.
@@ -87,19 +88,9 @@ export function WorkflowProgress({
   };
 
   useEffect(() => {
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
-      void fetchProgress();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchProgress();
   }, [travelRequestId]);
-
-
-
-  if (error) {
-    return <p style={{ color: "#c62828" }}>{error}</p>;
-  }
-
-  if (!progress) {
-    return <p>Loading workflow progress…</p>;
-  }
 
   const runAction = async (action) => {
     setBusyAction(action);
@@ -126,6 +117,23 @@ export function WorkflowProgress({
       setBusyAction("");
     }
   };
+
+  if (error) {
+    return (
+      <div className="alert alert--error" role="alert">
+        <span>{error}</span>
+      </div>
+    );
+  }
+
+  if (!progress) {
+    return (
+      <div className="card card-pad mb-3" role="status">
+        <div className="spinner" aria-hidden="true" />
+        <p className="secondary mb-0">Loading workflow progress…</p>
+      </div>
+    );
+  }
 
   const {
     workflow,
@@ -164,26 +172,23 @@ export function WorkflowProgress({
       : null;
 
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #ddd",
-        borderRadius: "10px",
-        padding: "20px",
-        margin: "20px 0",
-      }}
+    <Card
+      title="Workflow progress"
+      className="mb-3"
+      actions={
+        pending_stage && !is_exception ? (
+          <span className="secondary">
+            Next:{" "}
+            <strong>
+              {STAGE_LABELS[pending_stage] || pending_stage}
+            </strong>
+          </span>
+        ) : undefined
+      }
     >
-      <h3 style={{ marginTop: 0 }}>Workflow Progress</h3>
-
       <ol
-        style={{
-          listStyle: "none",
-          display: "flex",
-          flexWrap: "wrap",
-          gap: "6px",
-          padding: 0,
-          margin: "12px 0",
-        }}
+        className="workflow"
+        style={{ listStyle: "none", padding: 0, margin: "8px 0 0" }}
       >
         {stageSequence.map((stage) => {
           const isCompleted = stage.statuses.every((s) =>
@@ -196,90 +201,67 @@ export function WorkflowProgress({
           const isException =
             exceptionStage === stage.group;
 
-          let background = "#f2f2f2";
-          let color = "#555";
-          let border = "1px solid #ddd";
-
-          if (isException) {
-            background = "#ffebee";
-            color = "#c62828";
-            border = "1px solid #c62828";
-          } else if (isCurrent) {
-            background = "#e8f1ff";
-            color = "#1d5fa7";
-            border = "1px solid #1d5fa7";
-          } else if (isCompleted) {
-            background = "#e8f5e9";
-            color = "#2e7d32";
-          }
+          const stepClass = isException
+            ? "exception"
+            : isCurrent
+            ? "current"
+            : isCompleted
+            ? "done"
+            : "";
 
           return (
             <li
               key={stage.group}
-              style={{
-                background,
-                color,
-                border,
-                padding: "6px 12px",
-                borderRadius: "999px",
-                fontWeight: isCurrent ? "bold" : "normal",
-              }}
+              className={`workflow-step ${stepClass}`.trim()}
               title={stage.statuses.join(", ")}
             >
-              {isCompleted && !isCurrent ? "✓ " : ""}
-              {stage.group}
-              {isCurrent ? " (current)" : ""}
+              <div className="workflow-dot" aria-hidden="true">
+                {isCompleted && !isCurrent ? "✓" : ""}
+              </div>
+
+              <div className="workflow-label">
+                {stage.group}
+                {isCurrent ? " · current" : ""}
+              </div>
             </li>
           );
         })}
       </ol>
 
-      {pending_stage && !is_exception && (
-        <p>
-          <strong>Next:</strong>{" "}
-          {STAGE_LABELS[pending_stage] || pending_stage}
-        </p>
-      )}
-
       {is_exception && current_stage && (
-        <p
-          style={{
-            color: "#c62828",
-            fontWeight: "bold",
-          }}
-        >
-          This request is {STAGE_LABELS[current_stage] || current_stage}.
-          No further actions are available.
-        </p>
+        <div className="alert alert--error mt-2" role="status">
+          <span>
+            This request is{" "}
+            {STAGE_LABELS[current_stage] || current_stage}. No further
+            actions are available.
+          </span>
+        </div>
       )}
 
       {allowed_actions?.length > 0 && !is_exception && (
-        <div
-          style={{
-            marginTop: "12px",
-            display: "flex",
-            flexWrap: "wrap",
-            gap: "8px",
-          }}
-        >
+        <div className="btn-row mt-2">
           {allowed_actions.map((action) => (
-            <button
+            <Button
               key={action}
+              size="sm"
               onClick={() => runAction(action)}
               disabled={busyAction !== ""}
+              loading={busyAction === action}
             >
               {busyAction === action
                 ? "Working…"
                 : ACTION_LABELS[action] || action}
-            </button>
+            </Button>
           ))}
         </div>
       )}
 
       {actionError && (
-        <p style={{ color: "#c62828" }}>{actionError}</p>
+        <div className="alert alert--error mt-2" role="alert">
+          <span>{actionError}</span>
+        </div>
       )}
-    </div>
+    </Card>
   );
 }
 

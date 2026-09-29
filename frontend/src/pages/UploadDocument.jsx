@@ -1,6 +1,20 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import apiClient from "../api/client";
+
+import {
+  PageHeader,
+  Breadcrumb,
+  Card,
+  Button,
+  FormField,
+  LoadingState,
+  ErrorState,
+  InlineError,
+  EmptyState,
+  DocumentStatusBadge,
+} from "../components/ui";
+import { extractApiError } from "../lib/format";
 
 function UploadDocument() {
   const { id } = useParams();
@@ -21,9 +35,9 @@ function UploadDocument() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
 
-  // --------------------------------
-  // Fetch Document Checklist
-  // --------------------------------
+  /* --------------------------------
+     Fetch Document Checklist
+     -------------------------------- */
 
   useEffect(() => {
     const fetchChecklist = async () => {
@@ -54,31 +68,21 @@ function UploadDocument() {
 
         // Unexpected response
         else {
-          console.error(
-            "Unexpected checklist API response:",
-            checklistData
-          );
-
           setChecklist([]);
           setError(
             "Unable to read document requirements."
           );
         }
-      } catch (error) {
-        console.error(
-          "Failed to load document checklist:",
-          error
-        );
-
-        if (error.response?.status === 401) {
+      } catch (err) {
+        if (err.response?.status === 401) {
           setError(
             "Your session has expired. Please login again."
           );
-        } else if (error.response?.status === 403) {
+        } else if (err.response?.status === 403) {
           setError(
             "You do not have permission to access this request."
           );
-        } else if (error.response?.status === 404) {
+        } else if (err.response?.status === 404) {
           setError("Travel request not found.");
         } else {
           setError(
@@ -95,9 +99,9 @@ function UploadDocument() {
     fetchChecklist();
   }, [id]);
 
-  // --------------------------------
-  // Form Change
-  // --------------------------------
+  /* --------------------------------
+     Form Change
+     -------------------------------- */
 
   const handleChange = (event) => {
     const { name, value } = event.target;
@@ -108,9 +112,9 @@ function UploadDocument() {
     }));
   };
 
-  // --------------------------------
-  // File Change
-  // --------------------------------
+  /* --------------------------------
+     File Change
+     -------------------------------- */
 
   const handleFileChange = (event) => {
     const selectedFile = event.target.files[0];
@@ -148,9 +152,9 @@ function UploadDocument() {
     setFile(selectedFile);
   };
 
-  // --------------------------------
-  // Submit Upload
-  // --------------------------------
+  /* --------------------------------
+     Submit Upload
+     -------------------------------- */
 
   const handleSubmit = async (event) => {
     event.preventDefault();
@@ -197,14 +201,9 @@ function UploadDocument() {
     }
 
     try {
-      const response = await apiClient.post(
+      await apiClient.post(
         `travel-requests/${id}/documents/upload/`,
         uploadData
-      );
-
-      console.log(
-        "Document uploaded:",
-        response.data
       );
 
       setSuccess(
@@ -233,400 +232,233 @@ function UploadDocument() {
           `/travel-requests/${id}`
         );
       }, 1000);
-    } catch (error) {
-      console.error(
-        "Document upload failed:",
-        error
+    } catch (err) {
+      setError(
+        extractApiError(err, "Unable to upload document.")
       );
-
-      if (error.response?.data) {
-        const backendErrors =
-          error.response.data;
-
-        if (
-          typeof backendErrors ===
-          "object"
-        ) {
-          const messages =
-            Object.entries(
-              backendErrors
-            )
-              .map(
-                ([field, messages]) => {
-                  if (
-                    Array.isArray(messages)
-                  ) {
-                    return `${field}: ${messages.join(
-                      ", "
-                    )}`;
-                  }
-
-                  return `${field}: ${messages}`;
-                }
-              )
-              .join(" | ");
-
-          setError(messages);
-        } else {
-          setError(
-            "Unable to upload document."
-          );
-        }
-      } else {
-        setError(
-          "Unable to upload document."
-        );
-      }
     } finally {
       setSubmitting(false);
     }
   };
 
-  // --------------------------------
-  // Loading
-  // --------------------------------
+  /* --------------------------------
+     Loading
+     -------------------------------- */
 
   if (loading) {
     return (
-      <div
-        style={{
-          padding: "30px",
-        }}
-      >
-        <h1>Upload Document</h1>
-
-        <p>
-          Loading document requirements...
-        </p>
-      </div>
+      <>
+        <PageHeader
+          title="Upload Document"
+          description="Provide the required travel documents."
+        />
+        <LoadingState label="Loading document requirements…" />
+      </>
     );
   }
 
-  // --------------------------------
-  // Error when checklist unavailable
-  // --------------------------------
+  /* --------------------------------
+     Error when checklist unavailable
+     -------------------------------- */
 
-  if (
-    error &&
-    checklist.length === 0
-  ) {
+  if (error && checklist.length === 0) {
     return (
-      <div
-        style={{
-          padding: "30px",
-        }}
-      >
-        <p
-          style={{
-            color: "red",
-          }}
-        >
-          {error}
-        </p>
-
-        <button
-          onClick={() =>
-            navigate(
-              `/travel-requests/${id}`
-            )
-          }
-        >
-          Back to Travel Request
-        </button>
-      </div>
+      <>
+        <Breadcrumb
+          items={[
+            { label: "Travel Requests", to: "/travel-requests" },
+            { label: `#${id}`, to: `/travel-requests/${id}` },
+            { label: "Upload Document" },
+          ]}
+        />
+        <ErrorState
+          title="Unable to load document requirements"
+          message={error}
+          onRetry={() => navigate(`/travel-requests/${id}`)}
+        />
+      </>
     );
   }
 
-  // --------------------------------
-  // Documents available for upload
-  // --------------------------------
+  /* --------------------------------
+     Documents available for upload
+     -------------------------------- */
 
   const uploadableDocuments =
     checklist.filter(
       (document) =>
-        document.status ===
-          "MISSING" ||
-        document.status ===
-          "REJECTED"
+        document.status === "MISSING" ||
+        document.status === "REJECTED"
     );
 
-  // --------------------------------
-  // Page
-  // --------------------------------
+  /* --------------------------------
+     Page
+     -------------------------------- */
 
   return (
-    <div
-      style={{
-        maxWidth: "700px",
-        margin: "0 auto",
-        padding: "30px",
-      }}
-    >
-      <h1>Upload Document</h1>
+    <>
+      <Breadcrumb
+        items={[
+          { label: "Travel Requests", to: "/travel-requests" },
+          { label: `#${id}`, to: `/travel-requests/${id}` },
+          { label: "Upload Document" },
+        ]}
+      />
 
-      <p>
-        <strong>
-          Travel Request ID:
-        </strong>{" "}
-        {id}
-      </p>
+      <PageHeader
+        title="Upload Document"
+        description="Provide a missing document or replace one that was rejected."
+      />
 
-      {error && (
-        <p
-          style={{
-            color: "red",
-          }}
-        >
-          {error}
-        </p>
-      )}
+      <InlineError>{error}</InlineError>
 
       {success && (
-        <p
-          style={{
-            color: "green",
-          }}
-        >
-          {success}
-        </p>
+        <div className="alert alert--success" role="status">
+          <span>{success} Redirecting you back to the request…</span>
+        </div>
       )}
 
-      {uploadableDocuments.length ===
-        0 ? (
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            padding: "20px",
-            marginBottom: "20px",
-          }}
-        >
-          <p>
-            There are no missing or rejected
-            documents available for upload.
-          </p>
-
-          <button
-            onClick={() =>
-              navigate(
-                `/travel-requests/${id}`
-              )
+      {uploadableDocuments.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon="📎"
+            title="Nothing to upload right now"
+            description="There are no missing or rejected documents available for upload on this request."
+            action={
+              <Link
+                to={`/travel-requests/${id}`}
+                className="btn btn--secondary"
+              >
+                Back to Travel Request
+              </Link>
             }
-          >
-            Back to Travel Request
-          </button>
-        </div>
+          />
+        </Card>
       ) : (
-        <form
-          onSubmit={handleSubmit}
-        >
-          {/* -------------------------------- */}
-          {/* Document Type */}
-          {/* -------------------------------- */}
+        <form onSubmit={handleSubmit} noValidate>
+          <Card title="Document details">
+            <div className="stack">
+              <FormField
+                label="Document Type"
+                htmlFor="document_type"
+                required
+                help="You can upload missing documents or replace documents rejected during review."
+              >
+                <select
+                  id="document_type"
+                  name="document_type"
+                  className="select"
+                  value={formData.document_type}
+                  onChange={handleChange}
+                  required
+                >
+                  <option value="">Select document type</option>
 
-          <div
-            style={{
-              marginBottom: "20px",
-            }}
-          >
-            <label
-              htmlFor="document_type"
-            >
-              <strong>
-                Document Type
-              </strong>
-            </label>
+                  {uploadableDocuments.map((document) => (
+                    <option
+                      key={document.document_type_id}
+                      value={document.document_type_id}
+                    >
+                      {document.document_type}
+                      {document.status === "REJECTED"
+                        ? " — Re-upload"
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+              </FormField>
 
-            <br />
+              <FormField
+                label="File"
+                htmlFor="document-file"
+                required
+                help="PDF, JPG or PNG, up to 10 MB."
+              >
+                <input
+                  id="document-file"
+                  className="input"
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={handleFileChange}
+                  required
+                />
+              </FormField>
 
-            <select
-              id="document_type"
-              name="document_type"
-              value={
-                formData.document_type
-              }
-              onChange={handleChange}
-              required
-              style={{
-                marginTop: "8px",
-                padding: "8px",
-                minWidth: "300px",
-              }}
-            >
-              <option value="">
-                Select Document Type
-              </option>
+              <div className="form-grid">
+                <FormField
+                  label="Issue Date (optional)"
+                  htmlFor="issue_date"
+                >
+                  <input
+                    id="issue_date"
+                    className="input"
+                    type="date"
+                    name="issue_date"
+                    value={formData.issue_date}
+                    onChange={handleChange}
+                  />
+                </FormField>
 
-              {uploadableDocuments.map(
-                (document) => (
-                  <option
-                    key={
-                      document.document_type_id
-                    }
-                    value={
-                      document.document_type_id
-                    }
-                  >
-                    {document.document_type}
+                <FormField
+                  label="Expiry Date (optional)"
+                  htmlFor="expiry_date"
+                >
+                  <input
+                    id="expiry_date"
+                    className="input"
+                    type="date"
+                    name="expiry_date"
+                    value={formData.expiry_date}
+                    onChange={handleChange}
+                  />
+                </FormField>
+              </div>
+            </div>
+          </Card>
 
-                    {document.status ===
-                      "REJECTED"
-                      ? " - Re-upload"
-                      : ""}
-                  </option>
-                )
-              )}
-            </select>
+          <div className="btn-row mt-2">
+            <Button type="submit" variant="primary" loading={submitting}>
+              {submitting ? "Uploading…" : "Upload Document"}
+            </Button>
 
-            <p
-              style={{
-                fontSize: "13px",
-                color: "#666",
-                marginTop: "5px",
-              }}
-            >
-              You can upload missing
-              documents or replace
-              documents rejected during
-              review.
-            </p>
-          </div>
-
-          {/* -------------------------------- */}
-          {/* File */}
-          {/* -------------------------------- */}
-
-          <div
-            style={{
-              marginBottom: "20px",
-            }}
-          >
-            <label htmlFor="document-file">
-              <strong>
-                Document File
-              </strong>
-            </label>
-
-            <br />
-
-            <input
-              id="document-file"
-              type="file"
-              accept=".pdf,.jpg,.jpeg,.png"
-              onChange={
-                handleFileChange
-              }
-              required
-              style={{
-                marginTop: "8px",
-              }}
-            />
-
-            <br />
-
-            <small>
-              Allowed: PDF, JPG, JPEG,
-              PNG. Maximum 10 MB.
-            </small>
-          </div>
-
-          {/* -------------------------------- */}
-          {/* Issue Date */}
-          {/* -------------------------------- */}
-
-          <div
-            style={{
-              marginBottom: "20px",
-            }}
-          >
-            <label htmlFor="issue_date">
-              <strong>
-                Issue Date
-              </strong>
-            </label>
-
-            <br />
-
-            <input
-              id="issue_date"
-              type="date"
-              name="issue_date"
-              value={
-                formData.issue_date
-              }
-              onChange={handleChange}
-              style={{
-                marginTop: "8px",
-                padding: "6px",
-              }}
-            />
-          </div>
-
-          {/* -------------------------------- */}
-          {/* Expiry Date */}
-          {/* -------------------------------- */}
-
-          <div
-            style={{
-              marginBottom: "20px",
-            }}
-          >
-            <label htmlFor="expiry_date">
-              <strong>
-                Expiry Date
-              </strong>
-            </label>
-
-            <br />
-
-            <input
-              id="expiry_date"
-              type="date"
-              name="expiry_date"
-              value={
-                formData.expiry_date
-              }
-              onChange={handleChange}
-              style={{
-                marginTop: "8px",
-                padding: "6px",
-              }}
-            />
-          </div>
-
-          {/* -------------------------------- */}
-          {/* Buttons */}
-          {/* -------------------------------- */}
-
-          <div
-            style={{
-              display: "flex",
-              gap: "10px",
-            }}
-          >
-            <button
-              type="submit"
-              disabled={submitting}
-            >
-              {submitting
-                ? "Uploading..."
-                : "Upload Document"}
-            </button>
-
-            <button
-              type="button"
-              onClick={() =>
-                navigate(
-                  `/travel-requests/${id}`
-                )
-              }
+            <Link
+              to={`/travel-requests/${id}`}
+              className="btn btn--secondary"
             >
               Cancel
-            </button>
+            </Link>
           </div>
         </form>
       )}
-    </div>
+
+      {/* Checklist context */}
+      {checklist.length > 0 && (
+        <Card title="Document checklist" className="mt-3" padded={false}>
+          <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+            <table className="table table--compact">
+              <thead>
+                <tr>
+                  <th>Document</th>
+                  <th>Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {checklist.map((document) => (
+                  <tr key={document.document_type_id}>
+                    <td className="cell-strong">
+                      {document.document_type || "—"}
+                    </td>
+                    <td>
+                      <DocumentStatusBadge status={document.status} />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </>
   );
 }
 

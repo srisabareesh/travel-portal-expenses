@@ -1,13 +1,21 @@
 import { useEffect, useState } from "react";
 import apiClient from "../api/client";
 
+import {
+  LoadingState,
+  EmptyState,
+  Button,
+} from "./ui";
+import { formatDateTime } from "../lib/format";
+
 /**
  * NotificationList — Phase 16.
  *
  * Renders the signed-in user's in-app notifications from
  * the backend notifications API, with mark-as-read.
+ * `compact` trims the list for dashboard sidebars.
  */
-export function NotificationList() {
+export function NotificationList({ compact = false }) {
   const [notifications, setNotifications] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -26,11 +34,9 @@ export function NotificationList() {
   };
 
   useEffect(() => {
-          // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
-      void fetchNotifications();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchNotifications();
   }, []);
-
-
 
   const markRead = async (notificationId) => {
     try {
@@ -45,66 +51,74 @@ export function NotificationList() {
   };
 
   if (loading) {
-    return <p>Loading notifications…</p>;
+    return <LoadingState label="Loading notifications…" />;
+  }
+
+  if (error) {
+    return (
+      <div className="alert alert--error" role="alert">
+        <span>{error}</span>
+      </div>
+    );
+  }
+
+  const visible = compact
+    ? notifications.slice(0, 5)
+    : notifications;
+
+  if (notifications.length === 0) {
+    return (
+      <EmptyState
+        icon="🔔"
+        title="No notifications yet"
+        description="Updates about your travel requests will appear here."
+      />
+    );
   }
 
   return (
-    <div
-      style={{
-        background: "#ffffff",
-        border: "1px solid #ddd",
-        borderRadius: "10px",
-        padding: "20px",
-        margin: "20px 0",
-      }}
-    >
-      <h3 style={{ marginTop: 0 }}>
-        Notifications
-      </h3>
+    <div>
+      <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+        {visible.map((notification) => (
+          <li
+            key={notification.id}
+            className={`notif-item ${
+              notification.is_read ? "read" : "unread"
+            }`}
+          >
+            <span
+              className="notif-dot"
+              aria-hidden="true"
+            />
 
-      {error && (
-        <p style={{ color: "#c62828" }}>{error}</p>
-      )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <p className="notif-title">
+                {notification.message}
+              </p>
 
-      {notifications.length === 0 ? (
-        <p>No notifications yet.</p>
-      ) : (
-        <ul style={{ paddingLeft: "16px" }}>
-          {notifications.map((notification) => (
-            <li
-              key={notification.id}
-              style={{
-                marginBottom: "10px",
-                fontWeight: notification.is_read
-                  ? "normal"
-                  : "bold",
-              }}
-            >
-              <div>{notification.message}</div>
-
-              <div
-                style={{
-                  color: "#777",
-                  fontSize: "12px",
-                }}
-              >
-                {new Date(
-                  notification.created_at
-                ).toLocaleString()}
-                {!notification.is_read && (
-                  <button
-                    style={{ marginLeft: "10px" }}
-                    onClick={() =>
-                      markRead(notification.id)
-                    }
-                  >
-                    Mark read
-                  </button>
-                )}
+              <div className="notif-time">
+                {formatDateTime(notification.created_at)}
               </div>
-            </li>
-          ))}
-        </ul>
+            </div>
+
+            {!notification.is_read && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => markRead(notification.id)}
+              >
+                Mark read
+              </Button>
+            )}
+          </li>
+        ))}
+      </ul>
+
+      {compact && notifications.length > visible.length && (
+        <p className="mt-1 mb-0 secondary">
+          And {notifications.length - visible.length} more — see all
+          notifications for the full list.
+        </p>
       )}
     </div>
   );

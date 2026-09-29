@@ -3,6 +3,9 @@ import apiClient from "../api/client";
 import { useAuth } from "../hooks/useAuth";
 import { useNavigate } from "react-router-dom";
 
+import { Button } from "../components/ui";
+import { extractApiError } from "../lib/format";
+
 function Login() {
   const { login } = useAuth();
   const navigate = useNavigate();
@@ -27,85 +30,83 @@ function Login() {
       const { access, refresh } = response.data;
 
       await login(access, refresh);
-      
 
-      console.log("Login successful");
-      console.log("Access token:", access);
-      console.log("Refresh token:", refresh);
       navigate("/dashboard");
-
-    } catch (error) {
-      console.error(error);
-
-      if (error.response?.data?.detail) {
-        setError(error.response.data.detail);
-      } else {
-        setError("Login failed. Please try again.");
-      }
+    } catch (err) {
+      setError(extractApiError(err, "Login failed. Please try again."));
     } finally {
       setLoading(false);
     }
   };
 
   return (
-    <div className="login-container">
-      <div className="login-box">
+    <div className="login-page">
+      <div className="login-card">
+        <div className="login-brand">
+          <span className="app-sidebar-brand-mark" aria-hidden="true">
+            ✈
+          </span>
+        </div>
 
-        <h1>Onsite Travel Portal</h1>
+        <h1 className="login-title">Onsite Travel Portal</h1>
 
-        <h2>Login</h2>
+        <p className="login-subtitle">
+          Sign in to manage your business travel
+        </p>
 
-        <form onSubmit={handleSubmit}>
+        <form onSubmit={handleSubmit} noValidate>
+          <div className="stack">
+            <div className="form-field">
+              <label htmlFor="username">Username</label>
 
-          <div>
-            <label htmlFor="username">
-              Username
-            </label>
+              <input
+                id="username"
+                className="input"
+                type="text"
+                autoComplete="username"
+                value={username}
+                onChange={(event) =>
+                  setUsername(event.target.value)
+                }
+                placeholder="Enter username"
+                required
+              />
+            </div>
 
-            <input
-              id="username"
-              type="text"
-              value={username}
-              onChange={(event) =>
-                setUsername(event.target.value)
-              }
-              placeholder="Enter username"
-              required
-            />
+            <div className="form-field">
+              <label htmlFor="password">Password</label>
+
+              <input
+                id="password"
+                className="input"
+                type="password"
+                autoComplete="current-password"
+                value={password}
+                onChange={(event) =>
+                  setPassword(event.target.value)
+                }
+                placeholder="Enter password"
+                required
+              />
+            </div>
+
+            {error && (
+              <div className="alert alert--error" role="alert">
+                <span>{error}</span>
+              </div>
+            )}
+
+            <Button
+              type="submit"
+              variant="primary"
+              size="lg"
+              block
+              loading={loading}
+            >
+              {loading ? "Signing in…" : "Sign In"}
+            </Button>
           </div>
-
-          <div>
-            <label htmlFor="password">
-              Password
-            </label>
-
-            <input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(event) =>
-                setPassword(event.target.value)
-              }
-              placeholder="Enter password"
-              required
-            />
-          </div>
-
-          {error && (
-            <p style={{ color: "red" }}>
-              {error}
-            </p>
-          )}
-
-          <button
-            type="submit"
-            disabled={loading}
-          >
-            {loading ? "Logging in..." : "Login"}
-          </button>
-
         </form>
-
       </div>
     </div>
   );

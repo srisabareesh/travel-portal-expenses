@@ -1,9 +1,22 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
+import { useNavigate, useParams, Link } from "react-router-dom";
 import apiClient from "../api/client";
 
 import WorkflowProgress from "../components/WorkflowProgress";
 import TravelSections from "../components/TravelSections";
+import {
+  PageHeader,
+  Breadcrumb,
+  Card,
+  Button,
+  Table,
+  DocumentStatusBadge,
+  TravelTypeBadge,
+  RequestStatusBadge,
+  LoadingState,
+  ErrorState,
+} from "../components/ui";
+import { formatDate, travelWindow } from "../lib/format";
 
 function TravelRequestDetails() {
   const { id } = useParams();
@@ -14,10 +27,6 @@ function TravelRequestDetails() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
-
-  // --------------------------------
-  // Fetch Travel Request + Checklist
-  // --------------------------------
 
   const fetchTravelRequestDetails = async () => {
     try {
@@ -30,12 +39,7 @@ function TravelRequestDetails() {
           apiClient.get(`travel-requests/${id}/documents/`),
         ]);
 
-      // Travel request
       setTravelRequest(requestResponse.data);
-
-      // --------------------------------
-      // Safely handle checklist response
-      // --------------------------------
 
       const checklistData = checklistResponse.data;
 
@@ -46,19 +50,9 @@ function TravelRequestDetails() {
       } else if (Array.isArray(checklistData.checklist)) {
         setChecklist(checklistData.checklist);
       } else {
-        console.error(
-          "Unexpected checklist API response:",
-          checklistData
-        );
-
         setChecklist([]);
       }
     } catch (err) {
-      console.error(
-        "Failed to load travel request details:",
-        err
-      );
-
       if (err.response?.status === 404) {
         setError("Travel request not found.");
       } else if (err.response?.status === 403) {
@@ -84,136 +78,50 @@ function TravelRequestDetails() {
     void fetchTravelRequestDetails();
   }, [id]);
 
-  // --------------------------------
-  // Request Status
-  // --------------------------------
-
-  const getStatusLabel = (status) => {
-    const statusLabels = {
-      DRAFT: "Draft",
-      SUBMITTED: "Submitted",
-      DOCUMENT_PENDING: "Documents Pending",
-      DOCUMENT_VERIFICATION: "Document Verification",
-      APPROVED: "Approved",
-      REJECTED: "Rejected",
-      CANCELLED: "Cancelled",
-      MANAGER_APPROVAL: "Manager Approval",
-      MANAGER_APPROVED: "Manager Approved",
-      DOCUMENTS_PENDING: "Documents Pending",
-      DOCUMENTS_UNDER_REVIEW: "Documents Under Review",
-      VISA_PROCESSING: "Visa Processing",
-      VISA_APPROVED: "Visa Approved",
-      TRAVEL_BOOKING: "Travel Booking",
-      TRAVEL_BOOKED: "Travel Booked",
-      TRAVEL_IN_PROGRESS: "Travel In Progress",
-      EXPENSE_SUBMISSION: "Expense Submission",
-      EXPENSE_VERIFICATION: "Expense Verification",
-      SETTLEMENT_PENDING: "Settlement Pending",
-      SETTLEMENT_APPROVAL: "Settlement Approval",
-      SETTLEMENT_APPROVED: "Settlement Approved",
-      SETTLEMENT_PROCESSING: "Settlement Processing",
-      COMPLETED: "Completed",
-      CLOSED: "Closed",
-      REQUEST_REJECTED: "Request Rejected",
-      REQUEST_CANCELLED: "Request Cancelled",
-    };
-
-    return statusLabels[status] || status || "-";
-  };
-
-  // --------------------------------
-  // Document Status
-  // --------------------------------
-
-  const getDocumentStatusLabel = (status) => {
-    const statusLabels = {
-      MISSING: "Missing",
-      UPLOADED: "Uploaded",
-      PENDING_REVIEW: "Pending Review",
-      VERIFIED: "Verified",
-      REJECTED: "Rejected",
-      EXPIRED: "Expired",
-      EXPIRING_SOON: "Expiring Soon",
-    };
-
-    return statusLabels[status] || status || "-";
-  };
-
-  const getDocumentStatusColor = (status) => {
-    if (status === "VERIFIED") {
-      return "green";
-    }
-
-    if (
-      status === "REJECTED" ||
-      status === "MISSING" ||
-      status === "EXPIRED"
-    ) {
-      return "red";
-    }
-
-    if (
-      status === "PENDING_REVIEW" ||
-      status === "UPLOADED" ||
-      status === "EXPIRING_SOON"
-    ) {
-      return "orange";
-    }
-
-    return "gray";
-  };
-
-  // --------------------------------
-  // Loading
-  // --------------------------------
-
   if (loading) {
     return (
-      <div style={{ padding: "30px" }}>
-        <h1>Travel Request Details</h1>
-
-        <p>Loading travel request...</p>
-      </div>
+      <>
+        <PageHeader
+          title="Travel Request"
+          description="Loading the request workspace…"
+        />
+        <LoadingState label="Loading travel request…" />
+      </>
     );
   }
-
-  // --------------------------------
-  // Error
-  // --------------------------------
 
   if (error) {
     return (
-      <div style={{ padding: "30px" }}>
-        <p style={{ color: "red" }}>{error}</p>
-
-        <button
-          onClick={() =>
-            navigate("/travel-requests")
-          }
-        >
-          Back to My Travel Requests
-        </button>
-      </div>
+      <>
+        <Breadcrumb
+          items={[
+            { label: "Dashboard", to: "/dashboard" },
+            { label: "Travel Requests", to: "/travel-requests" },
+            { label: "Details" },
+          ]}
+        />
+        <ErrorState
+          title="Unable to open this travel request"
+          message={error}
+          onRetry={() => fetchTravelRequestDetails()}
+        />
+        <p className="mt-2">
+          <Button variant="secondary" onClick={() => navigate("/travel-requests")}>
+            Back to My Travel Requests
+          </Button>
+        </p>
+      </>
     );
   }
-
-  // --------------------------------
-  // No Travel Request
-  // --------------------------------
 
   if (!travelRequest) {
     return null;
   }
 
-  // --------------------------------
-  // Document Statistics
-  // --------------------------------
-
   const totalDocuments = checklist.length;
 
   const verifiedDocuments = checklist.filter(
-    (document) =>
-      document.status === "VERIFIED"
+    (document) => document.status === "VERIFIED"
   ).length;
 
   const missingDocuments = checklist.filter(
@@ -231,14 +139,8 @@ function TravelRequestDetails() {
 
   const completionPercentage =
     totalDocuments > 0
-      ? Math.round(
-          (verifiedDocuments / totalDocuments) * 100
-        )
+      ? Math.round((verifiedDocuments / totalDocuments) * 100)
       : 0;
-
-  // --------------------------------
-  // Upload Action
-  // --------------------------------
 
   const needsDocumentAction = checklist.some(
     (document) =>
@@ -246,458 +148,89 @@ function TravelRequestDetails() {
       document.status === "REJECTED"
   );
 
-  // --------------------------------
-  // Page
-  // --------------------------------
-
   return (
-    <div
-      style={{
-        maxWidth: "1000px",
-        margin: "0 auto",
-        padding: "30px",
-      }}
-    >
-      {/* -------------------------------- */}
-      {/* Header */}
-      {/* -------------------------------- */}
+    <>
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", to: "/dashboard" },
+          { label: "Travel Requests", to: "/travel-requests" },
+          { label: travelRequest.request_number || `#${id}` },
+        ]}
+      />
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "25px",
-        }}
-      >
-        <div>
-          <h1>Travel Request Details</h1>
+      <PageHeader
+        title={`Request ${travelRequest.request_number || `#${id}`}`}
+        description={`${travelRequest.destination_city || "—"}${
+          travelRequest.country_name ? `, ${travelRequest.country_name}` : ""
+        } · ${travelWindow(travelRequest.start_date, travelRequest.end_date)}`}
+        actions={
+          <>
+            <RequestStatusBadge status={travelRequest.status} />
+            <TravelTypeBadge type={travelRequest.travel_type} />
+          </>
+        }
+      />
 
-          <p>
-            <strong>Request Number:</strong>{" "}
-            {travelRequest.request_number}
+      {/* Request overview */}
+      <Card title="Travel information" className="mb-3">
+        <div className="meta-list">
+          <div>
+            <div className="meta-item-label">Employee</div>
+            <div className="meta-item-value">
+              {travelRequest.employee_name || travelRequest.employee || "—"}
+            </div>
+          </div>
+
+          <div>
+            <div className="meta-item-label">Destination</div>
+            <div className="meta-item-value">
+              {travelRequest.destination_city || "—"}
+              {travelRequest.country_name
+                ? `, ${travelRequest.country_name}`
+                : travelRequest.destination_country
+                ? `, ${travelRequest.destination_country}`
+                : ""}
+            </div>
+          </div>
+
+          <div>
+            <div className="meta-item-label">Travel dates</div>
+            <div className="meta-item-value">
+              {travelWindow(travelRequest.start_date, travelRequest.end_date)}
+            </div>
+          </div>
+
+          <div>
+            <div className="meta-item-label">Client</div>
+            <div className="meta-item-value">
+              {travelRequest.client || "—"}
+            </div>
+          </div>
+
+          <div>
+            <div className="meta-item-label">Project</div>
+            <div className="meta-item-value">
+              {travelRequest.project || "—"}
+            </div>
+          </div>
+
+          <div>
+            <div className="meta-item-label">Travel type</div>
+            <div className="meta-item-value">
+              <TravelTypeBadge type={travelRequest.travel_type} />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-2">
+          <div className="meta-item-label">Purpose</div>
+          <p className="meta-item-value mb-0" style={{ whiteSpace: "pre-wrap" }}>
+            {travelRequest.purpose || "—"}
           </p>
         </div>
+      </Card>
 
-        <button
-          onClick={() =>
-            navigate("/travel-requests")
-          }
-        >
-          Back
-        </button>
-      </div>
-
-      {/* -------------------------------- */}
-      {/* Travel Information */}
-      {/* -------------------------------- */}
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "20px",
-          marginBottom: "25px",
-        }}
-      >
-        <h2>Travel Information</h2>
-
-        <p>
-          <strong>Destination Country:</strong>{" "}
-          {travelRequest.country_name ||
-            travelRequest.destination_country ||
-            "-"}
-        </p>
-
-        <p>
-          <strong>Destination City:</strong>{" "}
-          {travelRequest.destination_city || "-"}
-        </p>
-
-        <p>
-          <strong>Client:</strong>{" "}
-          {travelRequest.client || "-"}
-        </p>
-
-        <p>
-          <strong>Project:</strong>{" "}
-          {travelRequest.project || "-"}
-        </p>
-
-        <p>
-          <strong>Travel Type:</strong>{" "}
-          {travelRequest.travel_type || "-"}
-        </p>
-
-        <p>
-          <strong>Start Date:</strong>{" "}
-          {travelRequest.start_date || "-"}
-        </p>
-
-        <p>
-          <strong>End Date:</strong>{" "}
-          {travelRequest.end_date || "-"}
-        </p>
-
-        <p>
-          <strong>Purpose:</strong>{" "}
-          {travelRequest.purpose || "-"}
-        </p>
-
-        <p>
-          <strong>Request Status:</strong>{" "}
-          <span
-            style={{
-              fontWeight: "bold",
-            }}
-          >
-            {getStatusLabel(
-              travelRequest.status
-            )}
-          </span>
-        </p>
-      </div>
-
-      {/* -------------------------------- */}
-      {/* Document Progress */}
-      {/* -------------------------------- */}
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "20px",
-          marginBottom: "25px",
-        }}
-      >
-        <h2>Document Progress</h2>
-
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            marginBottom: "10px",
-          }}
-        >
-          <span>
-            <strong>
-              {verifiedDocuments}
-            </strong>{" "}
-            of{" "}
-            <strong>
-              {totalDocuments}
-            </strong>{" "}
-            documents verified
-          </span>
-
-          <strong>
-            {completionPercentage}%
-          </strong>
-        </div>
-
-        {/* Progress Bar */}
-
-        <div
-          style={{
-            width: "100%",
-            height: "20px",
-            backgroundColor: "#e5e5e5",
-            borderRadius: "10px",
-            overflow: "hidden",
-          }}
-        >
-          <div
-            style={{
-              width: `${completionPercentage}%`,
-              height: "100%",
-              backgroundColor: "green",
-              transition:
-                "width 0.3s ease",
-            }}
-          />
-        </div>
-
-        {/* Statistics */}
-
-        <div
-          style={{
-            display: "flex",
-            gap: "30px",
-            marginTop: "20px",
-            flexWrap: "wrap",
-          }}
-        >
-          <div>
-            <strong>Total</strong>
-            <br />
-            {totalDocuments}
-          </div>
-
-          <div>
-            <strong>Verified</strong>
-            <br />
-            {verifiedDocuments}
-          </div>
-
-          <div>
-            <strong>Pending</strong>
-            <br />
-            {pendingDocuments}
-          </div>
-
-          <div>
-            <strong>Missing / Rejected</strong>
-            <br />
-            {missingDocuments}
-          </div>
-        </div>
-      </div>
-
-      {/* -------------------------------- */}
-      {/* Upload Required Document */}
-      {/* -------------------------------- */}
-
-      {needsDocumentAction && (
-        <div
-          style={{
-            marginBottom: "25px",
-          }}
-        >
-          <button
-            onClick={() =>
-              navigate(
-                `/travel-requests/${id}/documents/upload`
-              )
-            }
-          >
-            Upload Required Document
-          </button>
-        </div>
-      )}
-
-      {/* -------------------------------- */}
-      {/* Document Checklist */}
-      {/* -------------------------------- */}
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "20px",
-        }}
-      >
-        <h2>Document Checklist</h2>
-
-        {checklist.length === 0 ? (
-          <p>
-            No documents are required for this
-            travel request.
-          </p>
-        ) : (
-          <div
-            style={{
-              overflowX: "auto",
-              marginTop: "15px",
-            }}
-          >
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-              }}
-            >
-              <thead>
-                <tr>
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px",
-                      borderBottom:
-                        "1px solid #ddd",
-                    }}
-                  >
-                    Document
-                  </th>
-
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px",
-                      borderBottom:
-                        "1px solid #ddd",
-                    }}
-                  >
-                    Mandatory
-                  </th>
-
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px",
-                      borderBottom:
-                        "1px solid #ddd",
-                    }}
-                  >
-                    Status
-                  </th>
-
-                  <th
-                    style={{
-                      textAlign: "left",
-                      padding: "10px",
-                      borderBottom:
-                        "1px solid #ddd",
-                    }}
-                  >
-                    Action
-                  </th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {checklist.map((document) => (
-                  <tr
-                    key={
-                      document.document_type_id
-                    }
-                  >
-                    {/* Document */}
-
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom:
-                          "1px solid #eee",
-                      }}
-                    >
-                      <strong>
-                        {document.document_type ||
-                          "-"}
-                      </strong>
-                    </td>
-
-                    {/* Mandatory */}
-
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom:
-                          "1px solid #eee",
-                      }}
-                    >
-                      {document.mandatory
-                        ? "Yes"
-                        : "No"}
-                    </td>
-
-                    {/* Status */}
-
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom:
-                          "1px solid #eee",
-                      }}
-                    >
-                      <span
-                        style={{
-                          color:
-                            getDocumentStatusColor(
-                              document.status
-                            ),
-                          fontWeight: "bold",
-                        }}
-                      >
-                        {getDocumentStatusLabel(
-                          document.status
-                        )}
-                      </span>
-                    </td>
-
-                    {/* Action */}
-
-                    <td
-                      style={{
-                        padding: "10px",
-                        borderBottom:
-                          "1px solid #eee",
-                      }}
-                    >
-                      {(document.status ===
-                        "MISSING" ||
-                        document.status ===
-                          "REJECTED") && (
-                        <button
-                          onClick={() =>
-                            navigate(
-                              `/travel-requests/${id}/documents/upload`
-                            )
-                          }
-                        >
-                          Upload
-                        </button>
-                      )}
-
-                      {document.status ===
-                        "PENDING_REVIEW" && (
-                        <span>
-                          Waiting for review
-                        </span>
-                      )}
-
-                      {document.status ===
-                        "UPLOADED" && (
-                        <span>
-                          Uploaded - Waiting
-                          for review
-                        </span>
-                      )}
-
-                      {document.status ===
-                        "VERIFIED" && (
-                        <span
-                          style={{
-                            color: "green",
-                            fontWeight: "bold",
-                          }}
-                        >
-                          ✓ Verified
-                        </span>
-                      )}
-
-                      {document.status ===
-                        "EXPIRED" && (
-                        <button
-                          onClick={() =>
-                            navigate(
-                              `/travel-requests/${id}/documents/upload`
-                            )
-                          }
-                        >
-                          Upload New Document
-                        </button>
-                      )}
-
-                      {document.status ===
-                        "EXPIRING_SOON" && (
-                        <span>
-                          Expiring Soon
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* -------------------------------- */}
-      {/* -------------------------------- */}
       {/* Workflow progress + business sections (Phase 16/17) */}
-      {/* -------------------------------- */}
-
       <WorkflowProgress
         travelRequestId={id}
         onChanged={fetchTravelRequestDetails}
@@ -705,22 +238,123 @@ function TravelRequestDetails() {
 
       <TravelSections travelRequestId={id} />
 
-      {/* -------------------------------- */}
-      {/* Refresh */}
-      {/* -------------------------------- */}
-
-      <div
-        style={{
-          marginTop: "20px",
-        }}
-      >
-        <button
-          onClick={fetchTravelRequestDetails}
+      {/* Documents */}
+      {totalDocuments > 0 && (
+        <Card
+          title="Documents"
+          subtitle={
+            needsDocumentAction
+              ? "Some documents are missing or were rejected — upload them to continue."
+              : `${verifiedDocuments} of ${totalDocuments} documents verified.`
+          }
+          className="mb-3"
+          actions={
+            needsDocumentAction ? (
+              <Link
+                to={`/travel-requests/${id}/documents/upload`}
+                className="btn btn--primary"
+              >
+                Upload Required Document
+              </Link>
+            ) : undefined
+          }
         >
-          Refresh
-        </button>
-      </div>
-    </div>
+          <div className="flex-between mb-1">
+            <span className="secondary">
+              <strong>{verifiedDocuments}</strong> of{" "}
+              <strong>{totalDocuments}</strong> verified
+            </span>
+            <span className="secondary">{completionPercentage}%</span>
+          </div>
+
+          <div className="progress" role="progressbar" aria-valuenow={completionPercentage} aria-valuemin={0} aria-valuemax={100} aria-label="Document verification progress">
+            <div
+              className="progress-bar"
+              style={{ width: `${completionPercentage}%` }}
+            />
+          </div>
+
+          <div className="kpi-grid mt-2" style={{ marginBottom: 0 }}>
+            <div className="kpi" style={{ boxShadow: "none" }}>
+              <div className="kpi-label">Total</div>
+              <div className="kpi-value">{totalDocuments}</div>
+            </div>
+
+            <div className="kpi" style={{ boxShadow: "none" }}>
+              <div className="kpi-label">Verified</div>
+              <div className="kpi-value kpi-value--success">
+                {verifiedDocuments}
+              </div>
+            </div>
+
+            <div className="kpi" style={{ boxShadow: "none" }}>
+              <div className="kpi-label">Pending</div>
+              <div className="kpi-value kpi-value--warning">
+                {pendingDocuments}
+              </div>
+            </div>
+
+            <div className="kpi" style={{ boxShadow: "none" }}>
+              <div className="kpi-label">Missing / Rejected</div>
+              <div className="kpi-value kpi-value--danger">
+                {missingDocuments}
+              </div>
+            </div>
+          </div>
+
+          <div className="mt-3">
+            <Table
+              compact
+              columns={[
+                { key: "document", label: "Document" },
+                { key: "mandatory", label: "Required" },
+                { key: "status", label: "Status" },
+                { key: "expiry", label: "Expiry" },
+                { key: "action", label: "Action", align: "right" },
+              ]}
+            >
+              {checklist.map((document) => (
+                <tr key={document.document_type_id}>
+                  <td className="cell-strong">
+                    {document.document_type || "—"}
+                  </td>
+
+                  <td>{document.mandatory ? "Yes" : "No"}</td>
+
+                  <td>
+                    <DocumentStatusBadge status={document.status} />
+                  </td>
+
+                  <td>{formatDate(document.expiry_date)}</td>
+
+                  <td style={{ textAlign: "right" }}>
+                    {document.status === "MISSING" ||
+                    document.status === "REJECTED" ? (
+                      <Link
+                        to={`/travel-requests/${id}/documents/upload`}
+                        className="btn btn--secondary btn--sm"
+                      >
+                        Upload
+                      </Link>
+                    ) : document.status === "VERIFIED" ? (
+                      <span className="secondary">✓ Verified</span>
+                    ) : (
+                      <span className="secondary">Awaiting review</span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </Table>
+          </div>
+        </Card>
+      )}
+
+      <p className="mt-3">
+        <Button variant="ghost" size="sm" onClick={fetchTravelRequestDetails}>
+          ↻ Refresh
+        </Button>
+      </p>
+    </>
   );
 }
 

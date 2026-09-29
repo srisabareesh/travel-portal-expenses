@@ -4,6 +4,26 @@ import apiClient from "../api/client";
 
 import WorkflowProgress from "../components/WorkflowProgress";
 import TravelSections from "../components/TravelSections";
+import {
+  PageHeader,
+  Breadcrumb,
+  Card,
+  Button,
+  Table,
+  Modal,
+  RequestStatusBadge,
+  TravelTypeBadge,
+  DocumentStatusBadge,
+  LoadingState,
+  ErrorState,
+  InlineError,
+  EmptyState,
+} from "../components/ui";
+import {
+  formatDate,
+  travelWindow,
+  documentStatusLabel,
+} from "../lib/format";
 
 function ReviewerTravelRequestDetails() {
   const { id } = useParams();
@@ -22,9 +42,9 @@ function ReviewerTravelRequestDetails() {
   const [verificationHistory, setVerificationHistory] = useState([]);
   const [historyLoading, setHistoryLoading] = useState(false);
 
-  // --------------------------------------------------
-  // Fetch Travel Request
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Fetch Travel Request
+     -------------------------------------------------- */
 
   const fetchTravelRequest = async () => {
     try {
@@ -33,26 +53,22 @@ function ReviewerTravelRequestDetails() {
       );
 
       setTravelRequest(response.data);
-    } catch (error) {
-      console.error(error);
-
-      if (error.response?.status === 403) {
+    } catch (err) {
+      if (err.response?.status === 403) {
         setError(
           "You do not have permission to access this travel request."
         );
-      } else if (error.response?.status === 404) {
+      } else if (err.response?.status === 404) {
         setError("Travel request not found.");
       } else {
-        setError(
-          "Unable to load travel request."
-        );
+        setError("Unable to load travel request.");
       }
     }
   };
 
-  // --------------------------------------------------
-  // Fetch Documents
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Fetch Documents
+     -------------------------------------------------- */
 
   const fetchDocuments = async () => {
     try {
@@ -66,28 +82,22 @@ function ReviewerTravelRequestDetails() {
       //   all_mandatory_verified: true/false
       // }
       setDocuments(response.data.checklist);
-    } catch (error) {
-      console.error(error);
-
-      if (error.response?.status === 403) {
+    } catch (err) {
+      if (err.response?.status === 403) {
         setError(
           "You do not have permission to view these documents."
         );
       } else {
-        setError(
-          "Unable to load travel documents."
-        );
+        setError("Unable to load travel documents.");
       }
     }
   };
 
-  // --------------------------------------------------
-  // Fetch Verification History
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Fetch Verification History
+     -------------------------------------------------- */
 
-  const fetchVerificationHistory = async (
-    documentId
-  ) => {
+  const fetchVerificationHistory = async (documentId) => {
     try {
       setHistoryLoading(true);
 
@@ -96,28 +106,24 @@ function ReviewerTravelRequestDetails() {
       );
 
       setVerificationHistory(response.data);
-    } catch (error) {
-      console.error(error);
-
+    } catch (err) {
       setVerificationHistory([]);
 
-      if (error.response?.status === 403) {
+      if (err.response?.status === 403) {
         setError(
           "You do not have permission to view verification history."
         );
       } else {
-        setError(
-          "Unable to load verification history."
-        );
+        setError("Unable to load verification history.");
       }
     } finally {
       setHistoryLoading(false);
     }
   };
 
-  // --------------------------------------------------
-  // Fetch All Data
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Fetch All Data
+     -------------------------------------------------- */
 
   const fetchData = async () => {
     setLoading(true);
@@ -136,9 +142,9 @@ function ReviewerTravelRequestDetails() {
     void fetchData();
   }, [id]);
 
-  // --------------------------------------------------
-  // Open Review
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Open / Close Review
+     -------------------------------------------------- */
 
   const openReview = async (document) => {
     setSelectedDocument(document);
@@ -151,10 +157,6 @@ function ReviewerTravelRequestDetails() {
     );
   };
 
-  // --------------------------------------------------
-  // Close Review
-  // --------------------------------------------------
-
   const closeReview = () => {
     setSelectedDocument(null);
     setReviewComments("");
@@ -162,9 +164,9 @@ function ReviewerTravelRequestDetails() {
     setError("");
   };
 
-  // --------------------------------------------------
-  // Approve Document
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Approve Document
+     -------------------------------------------------- */
 
   const handleApprove = async () => {
     if (!selectedDocument) {
@@ -185,33 +187,23 @@ function ReviewerTravelRequestDetails() {
         }
       );
 
-      alert(
-        "Document approved successfully."
-      );
-
       closeReview();
 
       await fetchData();
-    } catch (error) {
-      console.error(error);
-
-      if (error.response?.data?.detail) {
-        setError(
-          error.response.data.detail
-        );
+    } catch (err) {
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
       } else {
-        setError(
-          "Unable to approve the document."
-        );
+        setError("Unable to approve the document.");
       }
     } finally {
       setProcessing(false);
     }
   };
 
-  // --------------------------------------------------
-  // Reject Document
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Reject Document
+     -------------------------------------------------- */
 
   const handleReject = async () => {
     if (!selectedDocument) {
@@ -219,7 +211,7 @@ function ReviewerTravelRequestDetails() {
     }
 
     if (!reviewComments.trim()) {
-      alert(
+      setError(
         "Comments are required when rejecting a document."
       );
       return;
@@ -237,211 +229,97 @@ function ReviewerTravelRequestDetails() {
         }
       );
 
-      alert(
-        "Document rejected successfully."
-      );
-
       closeReview();
 
       await fetchData();
-    } catch (error) {
-      console.error(error);
-
-      if (error.response?.data?.detail) {
-        setError(
-          error.response.data.detail
-        );
+    } catch (err) {
+      if (err.response?.data?.detail) {
+        setError(err.response.data.detail);
       } else {
-        setError(
-          "Unable to reject the document."
-        );
+        setError("Unable to reject the document.");
       }
     } finally {
       setProcessing(false);
     }
   };
 
-  // --------------------------------------------------
-// File URL Helper
-// --------------------------------------------------
+  /* --------------------------------------------------
+     File URL Helper
+     -------------------------------------------------- */
 
-const getFileUrl = (file) => {
-  if (!file) {
-    return null;
-  }
-
-  if (
-    file.startsWith("http://") ||
-    file.startsWith("https://")
-  ) {
-    return file;
-  }
-
-  const normalizedFile = file.startsWith("/")
-    ? file
-    : `/${file}`;
-
-  return `http://127.0.0.1:8000${normalizedFile}`;
-};
-
-  // --------------------------------------------------
-  // Status Helpers
-  // --------------------------------------------------
-
-  const getStatusLabel = (status) => {
-    switch (status) {
-      case "MISSING":
-        return "Missing";
-
-      case "UPLOADED":
-        return "Uploaded";
-
-      case "PENDING_REVIEW":
-        return "Pending Review";
-
-      case "VERIFIED":
-        return "Verified";
-
-      case "REJECTED":
-        return "Rejected";
-
-      case "EXPIRED":
-        return "Expired";
-
-      case "EXPIRING_SOON":
-        return "Expiring Soon";
-
-      default:
-        return status || "-";
+  const getFileUrl = (file) => {
+    if (!file) {
+      return null;
     }
+
+    if (
+      file.startsWith("http://") ||
+      file.startsWith("https://")
+    ) {
+      return file;
+    }
+
+    const normalizedFile = file.startsWith("/")
+      ? file
+      : `/${file}`;
+
+    return `http://127.0.0.1:8000${normalizedFile}`;
   };
 
-  const getStatusStyle = (status) => {
-    switch (status) {
-      case "VERIFIED":
-        return {
-          backgroundColor: "#d4edda",
-          color: "#155724",
-        };
-
-      case "REJECTED":
-        return {
-          backgroundColor: "#f8d7da",
-          color: "#721c24",
-        };
-
-      case "PENDING_REVIEW":
-      case "UPLOADED":
-        return {
-          backgroundColor: "#fff3cd",
-          color: "#856404",
-        };
-
-      case "MISSING":
-        return {
-          backgroundColor: "#f8d7da",
-          color: "#721c24",
-        };
-
-      case "EXPIRING_SOON":
-        return {
-          backgroundColor: "#fff3cd",
-          color: "#856404",
-        };
-
-      case "EXPIRED":
-        return {
-          backgroundColor: "#f8d7da",
-          color: "#721c24",
-        };
-
-      default:
-        return {
-          backgroundColor: "#e2e3e5",
-          color: "#383d41",
-        };
-    }
-  };
-
-  // --------------------------------------------------
-  // Loading
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Loading / Error
+     -------------------------------------------------- */
 
   if (loading) {
     return (
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "30px",
-        }}
-      >
-        <p>Loading travel request...</p>
-      </div>
+      <>
+        <PageHeader
+          title="Review Travel Request"
+          description="Loading the request…"
+        />
+        <LoadingState label="Loading travel request…" />
+      </>
     );
   }
 
-  // --------------------------------------------------
-  // Error
-  // --------------------------------------------------
-
   if (error && !travelRequest) {
     return (
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "30px",
-        }}
-      >
-        <div
-          style={{
-            backgroundColor: "#f8d7da",
-            color: "#721c24",
-            padding: "12px 16px",
-            borderRadius: "6px",
-            marginBottom: "20px",
-          }}
-        >
-          {error}
-        </div>
-
-        <button
-          onClick={() =>
-            navigate(
-              "/reviewer/travel-requests"
-            )
-          }
-          style={{
-            padding: "9px 16px",
-            border: "none",
-            borderRadius: "5px",
-            cursor: "pointer",
-          }}
-        >
-          Back to Reviewer Requests
-        </button>
-      </div>
+      <>
+        <Breadcrumb
+          items={[
+            { label: "Dashboard", to: "/dashboard" },
+            { label: "Review Queue", to: "/reviewer/travel-requests" },
+            { label: `#${id}` },
+          ]}
+        />
+        <ErrorState
+          title="Unable to open this travel request"
+          message={error}
+        />
+        <p className="mt-2">
+          <Button
+            variant="secondary"
+            onClick={() => navigate("/reviewer/travel-requests")}
+          >
+            Back to Review Queue
+          </Button>
+        </p>
+      </>
     );
   }
 
   if (!travelRequest) {
     return (
-      <div
-        style={{
-          maxWidth: "1100px",
-          margin: "0 auto",
-          padding: "30px",
-        }}
-      >
-        <p>Travel request not found.</p>
-      </div>
+      <ErrorState
+        title="Travel request not found"
+        message="This request may have been removed."
+      />
     );
   }
 
-  // --------------------------------------------------
-  // Document Counts
-  // --------------------------------------------------
+  /* --------------------------------------------------
+     Document Counts
+     -------------------------------------------------- */
 
   const totalDocuments = documents.length;
 
@@ -452,1232 +330,376 @@ const getFileUrl = (file) => {
   ).length;
 
   const verifiedDocuments = documents.filter(
-    (document) =>
-      document.status === "VERIFIED"
+    (document) => document.status === "VERIFIED"
   ).length;
 
   const rejectedDocuments = documents.filter(
-    (document) =>
-      document.status === "REJECTED"
+    (document) => document.status === "REJECTED"
   ).length;
 
-  // --------------------------------------------------
-  // UI
-  // --------------------------------------------------
+  const reviewable =
+    selectedDocument &&
+    (selectedDocument.status === "UPLOADED" ||
+      selectedDocument.status === "PENDING_REVIEW");
+
+  /* --------------------------------------------------
+     UI
+     -------------------------------------------------- */
 
   return (
-    <div
-      style={{
-        maxWidth: "1100px",
-        margin: "0 auto",
-        padding: "30px",
-        fontFamily:
-          "Arial, Helvetica, sans-serif",
-      }}
-    >
+    <>
+      <Breadcrumb
+        items={[
+          { label: "Dashboard", to: "/dashboard" },
+          { label: "Review Queue", to: "/reviewer/travel-requests" },
+          { label: travelRequest.request_number || `#${id}` },
+        ]}
+      />
 
-      {/* ==================================================
-          PAGE HEADER
-          ================================================== */}
+      <PageHeader
+        title={`Review ${travelRequest.request_number || `#${id}`}`}
+        description={`${
+          travelRequest.employee_name || "Employee"
+        } · ${travelRequest.destination_city || "—"} · ${travelWindow(
+          travelRequest.start_date,
+          travelRequest.end_date
+        )}`}
+        actions={
+          <>
+            <RequestStatusBadge status={travelRequest.status} />
+            <TravelTypeBadge type={travelRequest.travel_type} />
+          </>
+        }
+      />
 
-      <div
-        style={{
-          display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          marginBottom: "25px",
-        }}
-      >
-        <div>
-          <h1
-            style={{
-              margin: "0 0 8px 0",
-              fontSize: "28px",
-            }}
-          >
-            Travel Request Details
-          </h1>
+      <InlineError>{error}</InlineError>
 
-          <p
-            style={{
-              margin: 0,
-              color: "#666",
-            }}
-          >
-            Review employee travel documents
-          </p>
-        </div>
-
-        <span
-          style={{
-            ...getStatusStyle(
-              travelRequest.status
-            ),
-            padding: "8px 14px",
-            borderRadius: "20px",
-            fontSize: "13px",
-            fontWeight: "600",
-          }}
-        >
-          {getStatusLabel(
-            travelRequest.status
-          )}
-        </span>
-      </div>
-
-      {/* ==================================================
-          ERROR MESSAGE
-          ================================================== */}
-
-      {error && (
-        <div
-          style={{
-            backgroundColor: "#f8d7da",
-            color: "#721c24",
-            padding: "12px 16px",
-            borderRadius: "6px",
-            marginBottom: "20px",
-          }}
-        >
-          {error}
-        </div>
-      )}
-
-      {/* ==================================================
-          TRAVEL REQUEST INFORMATION
-          ================================================== */}
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "25px",
-          marginBottom: "25px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: "20px",
-            fontSize: "21px",
-          }}
-        >
-          Travel Request Information
-        </h2>
-
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(250px, 1fr))",
-            gap: "18px",
-          }}
-        >
-
+      {/* Request summary */}
+      <Card title="Travel request information" className="mb-3">
+        <div className="meta-list">
           <div>
-            <strong>
-              Request Number
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.request_number ||
-                "-"}
-            </p>
+            <div className="meta-item-label">Request Number</div>
+            <div className="meta-item-value mono">
+              {travelRequest.request_number || "—"}
+            </div>
           </div>
 
           <div>
-            <strong>
-              Employee
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.employee_name ||
-                travelRequest.employee ||
-                "-"}
-            </p>
+            <div className="meta-item-label">Employee</div>
+            <div className="meta-item-value">
+              {travelRequest.employee_name || travelRequest.employee || "—"}
+            </div>
           </div>
 
           <div>
-            <strong>
-              Destination
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.destination_city ||
-                "-"}
+            <div className="meta-item-label">Destination</div>
+            <div className="meta-item-value">
+              {travelRequest.destination_city || "—"}
               {travelRequest.destination_country_name
                 ? `, ${travelRequest.destination_country_name}`
+                : travelRequest.country_name
+                ? `, ${travelRequest.country_name}`
                 : ""}
-            </p>
+            </div>
           </div>
 
           <div>
-            <strong>
-              Travel Type
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.travel_type ||
-                "-"}
-            </p>
+            <div className="meta-item-label">Travel Type</div>
+            <div className="meta-item-value">
+              <TravelTypeBadge type={travelRequest.travel_type} />
+            </div>
           </div>
 
           <div>
-            <strong>
-              Start Date
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.start_date ||
-                "-"}
-            </p>
+            <div className="meta-item-label">Start Date</div>
+            <div className="meta-item-value">
+              {formatDate(travelRequest.start_date)}
+            </div>
           </div>
 
           <div>
-            <strong>
-              End Date
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.end_date ||
-                "-"}
-            </p>
+            <div className="meta-item-label">End Date</div>
+            <div className="meta-item-value">
+              {formatDate(travelRequest.end_date)}
+            </div>
           </div>
 
           <div>
-            <strong>
-              Client
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.client || "-"}
-            </p>
+            <div className="meta-item-label">Client</div>
+            <div className="meta-item-value">
+              {travelRequest.client || "—"}
+            </div>
           </div>
 
           <div>
-            <strong>
-              Project
-            </strong>
-
-            <p
-              style={{
-                margin: "5px 0 0",
-              }}
-            >
-              {travelRequest.project || "-"}
-            </p>
+            <div className="meta-item-label">Project</div>
+            <div className="meta-item-value">
+              {travelRequest.project || "—"}
+            </div>
           </div>
-
         </div>
 
-        <div
-          style={{
-            marginTop: "20px",
-          }}
-        >
-          <strong>
-            Purpose
-          </strong>
-
-          <p
-            style={{
-              margin: "5px 0 0",
-              lineHeight: "1.5",
-            }}
-          >
-            {travelRequest.purpose || "-"}
+        <div className="mt-2">
+          <div className="meta-item-label">Purpose</div>
+          <p className="meta-item-value mb-0" style={{ whiteSpace: "pre-wrap" }}>
+            {travelRequest.purpose || "—"}
           </p>
         </div>
-      </div>
+      </Card>
 
-      {/* ==================================================
-          DOCUMENT SUMMARY
-          ================================================== */}
+      {/* Workflow + business sections */}
+      <WorkflowProgress travelRequestId={id} />
 
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "25px",
-          marginBottom: "25px",
-          backgroundColor: "#fff",
-        }}
-      >
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: "20px",
-            fontSize: "21px",
-          }}
-        >
-          Document Summary
-        </h2>
+      <TravelSections travelRequestId={id} />
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: "15px",
-          }}
-        >
-
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "7px",
-              padding: "18px",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "28px",
-                fontWeight: "bold",
-              }}
-            >
-              {totalDocuments}
-            </div>
-
-            <div
-              style={{
-                color: "#666",
-                marginTop: "5px",
-              }}
-            >
-              Total Documents
-            </div>
+      {/* Document summary */}
+      <Card title="Document summary" className="mb-3">
+        <div className="kpi-grid" style={{ marginBottom: 0 }}>
+          <div className="kpi" style={{ boxShadow: "none" }}>
+            <div className="kpi-label">Total Documents</div>
+            <div className="kpi-value">{totalDocuments}</div>
           </div>
 
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "7px",
-              padding: "18px",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "28px",
-                fontWeight: "bold",
-              }}
-            >
+          <div className="kpi" style={{ boxShadow: "none" }}>
+            <div className="kpi-label">Pending Review</div>
+            <div className="kpi-value kpi-value--warning">
               {pendingDocuments}
             </div>
-
-            <div
-              style={{
-                color: "#856404",
-                marginTop: "5px",
-              }}
-            >
-              Pending Review
-            </div>
           </div>
 
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "7px",
-              padding: "18px",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "28px",
-                fontWeight: "bold",
-              }}
-            >
+          <div className="kpi" style={{ boxShadow: "none" }}>
+            <div className="kpi-label">Verified</div>
+            <div className="kpi-value kpi-value--success">
               {verifiedDocuments}
             </div>
-
-            <div
-              style={{
-                color: "#155724",
-                marginTop: "5px",
-              }}
-            >
-              Verified
-            </div>
           </div>
 
-          <div
-            style={{
-              border: "1px solid #ddd",
-              borderRadius: "7px",
-              padding: "18px",
-              textAlign: "center",
-            }}
-          >
-            <div
-              style={{
-                fontSize: "28px",
-                fontWeight: "bold",
-              }}
-            >
+          <div className="kpi" style={{ boxShadow: "none" }}>
+            <div className="kpi-label">Rejected</div>
+            <div className="kpi-value kpi-value--danger">
               {rejectedDocuments}
             </div>
-
-            <div
-              style={{
-                color: "#721c24",
-                marginTop: "5px",
-              }}
-            >
-              Rejected
-            </div>
           </div>
-
         </div>
-      </div>
+      </Card>
 
-      {/* ==================================================
-          EMPLOYEE DOCUMENTS
-          ================================================== */}
-
-      <div
-        style={{
-          border: "1px solid #ddd",
-          borderRadius: "8px",
-          padding: "25px",
-          marginBottom: "25px",
-          backgroundColor: "#fff",
-        }}
+      {/* Documents table */}
+      <Card
+        title="Employee documents"
+        subtitle="Open a document to review its contents and record your decision."
+        className="mb-3"
+        padded={false}
       >
-        <h2
-          style={{
-            marginTop: 0,
-            marginBottom: "20px",
-            fontSize: "21px",
-          }}
-        >
-          Employee Documents
-        </h2>
-
         {documents.length === 0 ? (
-          <p
-            style={{
-              color: "#666",
-            }}
-          >
-            No documents found.
-          </p>
+          <EmptyState
+            icon="📄"
+            title="No documents found"
+            description="The employee has not uploaded any documents yet."
+          />
         ) : (
-          <div
-            style={{
-              overflowX: "auto",
-            }}
-          >
-            <table
-              style={{
-                width: "100%",
-                borderCollapse: "collapse",
-                fontSize: "14px",
-              }}
-            >
+          <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+            <table className="table">
               <thead>
-                <tr
-                  style={{
-                    backgroundColor: "#f5f5f5",
-                  }}
-                >
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                      textAlign: "left",
-                    }}
-                  >
-                    Document Type
-                  </th>
-
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                      textAlign: "center",
-                    }}
-                  >
-                    Mandatory
-                  </th>
-
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                      textAlign: "center",
-                    }}
-                  >
-                    Status
-                  </th>
-
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                    }}
-                  >
-                    Issue Date
-                  </th>
-
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                    }}
-                  >
-                    Expiry Date
-                  </th>
-
-                  <th
-                    style={{
-                      padding: "12px",
-                      border: "1px solid #ddd",
-                      textAlign: "center",
-                    }}
-                  >
-                    Actions
-                  </th>
+                <tr>
+                  <th>Document Type</th>
+                  <th>Required</th>
+                  <th>Status</th>
+                  <th>Issue Date</th>
+                  <th>Expiry Date</th>
+                  <th style={{ textAlign: "right" }}>Actions</th>
                 </tr>
               </thead>
 
               <tbody>
-                {documents.map(
-                  (document) => (
-                    <tr
-                      key={
-                        document.document_id
-                      }
-                    >
+                {documents.map((document) => (
+                  <tr key={document.document_id}>
+                    <td className="cell-strong">
+                      {document.document_type || "—"}
+                    </td>
 
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                          fontWeight: "500",
-                        }}
+                    <td>{document.mandatory ? "Yes" : "No"}</td>
+
+                    <td>
+                      <DocumentStatusBadge status={document.status} />
+                    </td>
+
+                    <td>{formatDate(document.issue_date)}</td>
+
+                    <td>{formatDate(document.expiry_date)}</td>
+
+                    <td style={{ textAlign: "right" }}>
+                      <div
+                        className="btn-row"
+                        style={{ justifyContent: "flex-end" }}
                       >
-                        {document.document_type ||
-                          "-"}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                          textAlign: "center",
-                        }}
-                      >
-                        {document.mandatory
-                          ? "Yes"
-                          : "No"}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                          textAlign: "center",
-                        }}
-                      >
-                        <span
-                          style={{
-                            ...getStatusStyle(
-                              document.status
-                            ),
-                            display:
-                              "inline-block",
-                            padding:
-                              "5px 10px",
-                            borderRadius:
-                              "12px",
-                            fontSize:
-                              "12px",
-                            fontWeight:
-                              "600",
-                          }}
-                        >
-                          {getStatusLabel(
-                            document.status
-                          )}
-                        </span>
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                        }}
-                      >
-                        {document.issue_date ||
-                          "-"}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                        }}
-                      >
-                        {document.expiry_date ||
-                          "-"}
-                      </td>
-
-                      <td
-                        style={{
-                          padding: "12px",
-                          border: "1px solid #ddd",
-                          textAlign: "center",
-                        }}
-                      >
-
                         {document.file && (
                           <a
                             href={getFileUrl(document.file)}
                             target="_blank"
                             rel="noreferrer"
-                            style={{
-                              marginRight: "10px",
-                              color: "#007bff",
-                              textDecoration: "none",
-                            }}
+                            className="btn btn--ghost btn--sm"
                           >
-                            View Document
+                            View
                           </a>
                         )}
 
-                        {(
-                          document.status ===
-                            "UPLOADED" ||
-                          document.status ===
-                            "PENDING_REVIEW"
-                        ) && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openReview(
-                                document
-                              )
-                            }
-                            style={{
-                              padding:
-                                "6px 12px",
-                              border: "none",
-                              borderRadius:
-                                "5px",
-                              cursor:
-                                "pointer",
-                            }}
-                          >
+                        {document.status === "UPLOADED" ||
+                        document.status === "PENDING_REVIEW" ? (
+                          <Button size="sm" onClick={() => openReview(document)}>
                             Review
-                          </button>
-                        )}
+                          </Button>
+                        ) : null}
 
-                        {document.status ===
-                          "REJECTED" && (
-                          <button
-                            type="button"
-                            onClick={() =>
-                              openReview(
-                                document
-                              )
-                            }
-                            style={{
-                              padding:
-                                "6px 12px",
-                              border: "1px solid #dc3545",
-                              borderRadius:
-                                "5px",
-                              cursor:
-                                "pointer",
-                            }}
+                        {document.status === "REJECTED" ? (
+                          <Button
+                            variant="secondary"
+                            size="sm"
+                            onClick={() => openReview(document)}
                           >
                             View Review
-                          </button>
-                        )}
+                          </Button>
+                        ) : null}
 
-                        {document.status ===
-                          "VERIFIED" && (
-                          <span
-                            style={{
-                              color:
-                                "#155724",
-                              fontWeight:
-                                "600",
-                            }}
-                          >
-                            ✓ Verified
-                          </span>
-                        )}
-
-                      </td>
-                    </tr>
-                  )
-                )}
+                        {document.status === "VERIFIED" ? (
+                          <span className="secondary">✓ Verified</span>
+                        ) : null}
+                      </div>
+                    </td>
+                  </tr>
+                ))}
               </tbody>
             </table>
           </div>
         )}
-      </div>
+      </Card>
 
-      {/* ==================================================
-          DOCUMENT REVIEW PANEL
-          ================================================== */}
-
+      {/* Review modal */}
       {selectedDocument && (
-        <div
-          style={{
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            padding: "25px",
-            marginBottom: "25px",
-            backgroundColor: "#fff",
-          }}
+        <Modal
+          title={`Document Review — ${documentStatusLabel(
+            selectedDocument.status
+          )}`}
+          onClose={closeReview}
         >
-          <div
-            style={{
-              display: "flex",
-              justifyContent: "space-between",
-              alignItems: "center",
-              marginBottom: "20px",
-            }}
-          >
-            <h2
-              style={{
-                margin: 0,
-                fontSize: "21px",
-              }}
-            >
-              Document Review
-            </h2>
-
-            <button
-              type="button"
-              onClick={closeReview}
-              disabled={processing}
-              style={{
-                padding: "6px 12px",
-                border: "1px solid #ccc",
-                borderRadius: "5px",
-                backgroundColor: "#fff",
-                cursor: "pointer",
-              }}
-            >
-              Close
-            </button>
-          </div>
-
-          {/* Document Details */}
-
-          <div
-            style={{
-              display: "grid",
-              gridTemplateColumns:
-                "repeat(auto-fit, minmax(220px, 1fr))",
-              gap: "18px",
-              marginBottom: "20px",
-            }}
-          >
+          <div className="meta-list mb-2">
             <div>
-              <strong>
-                Document Type
-              </strong>
-
-              <p
-                style={{
-                  margin: "5px 0",
-                }}
-              >
-                {selectedDocument.document_type ||
-                  "-"}
-              </p>
+              <div className="meta-item-label">Document Type</div>
+              <div className="meta-item-value">
+                {selectedDocument.document_type || "—"}
+              </div>
             </div>
 
             <div>
-              <strong>
-                Status
-              </strong>
-
-              <p
-                style={{
-                  margin: "5px 0",
-                }}
-              >
-                <span
-                  style={{
-                    ...getStatusStyle(
-                      selectedDocument.status
-                    ),
-                    display:
-                      "inline-block",
-                    padding:
-                      "5px 10px",
-                    borderRadius:
-                      "12px",
-                    fontSize:
-                      "12px",
-                    fontWeight:
-                      "600",
-                  }}
-                >
-                  {getStatusLabel(
-                    selectedDocument.status
-                  )}
-                </span>
-              </p>
+              <div className="meta-item-label">Status</div>
+              <div className="meta-item-value">
+                <DocumentStatusBadge status={selectedDocument.status} />
+              </div>
             </div>
           </div>
 
           {selectedDocument.file && (
-            <div
-              style={{
-                marginBottom: "20px",
-              }}
-            >
+            <p>
               <a
                 href={getFileUrl(selectedDocument.file)}
                 target="_blank"
                 rel="noreferrer"
-                style={{
-                  display:
-                    "inline-block",
-                  padding:
-                    "9px 15px",
-                  border:
-                    "1px solid #007bff",
-                  borderRadius:
-                    "5px",
-                  textDecoration:
-                    "none",
-                  color: "#007bff",
-                }}
+                className="btn btn--secondary btn--sm"
               >
                 Open Document
               </a>
-            </div>
+            </p>
           )}
 
-          {/* Review Comments */}
-
-          <div
-            style={{
-              marginBottom: "20px",
-            }}
-          >
-            <label
-              htmlFor="review-comments"
-              style={{
-                display:
-                  "block",
-                fontWeight:
-                  "600",
-                marginBottom:
-                  "8px",
-              }}
-            >
+          <div className="form-field">
+            <label htmlFor="review-comments">
               Review Comments
+              {reviewable && (
+                <span className="secondary"> (required when rejecting)</span>
+              )}
             </label>
 
             <textarea
               id="review-comments"
-              rows="5"
-              value={
-                reviewComments
-              }
-              onChange={(event) =>
-                setReviewComments(
-                  event.target.value
-                )
-              }
-              placeholder="Enter review comments..."
+              className="textarea"
+              rows={4}
+              value={reviewComments}
+              onChange={(event) => setReviewComments(event.target.value)}
+              placeholder="Enter review comments…"
               disabled={processing}
-              style={{
-                width: "100%",
-                maxWidth: "700px",
-                padding: "10px",
-                border:
-                  "1px solid #ccc",
-                borderRadius:
-                  "5px",
-                resize:
-                  "vertical",
-                boxSizing:
-                  "border-box",
-              }}
             />
-
-            <p
-              style={{
-                fontSize: "12px",
-                color: "#666",
-                marginTop: "5px",
-              }}
-            >
-              Comments are required when
-              rejecting a document.
-            </p>
           </div>
 
-          {/* Review Buttons */}
+          {reviewable && (
+            <div className="btn-row mt-2">
+              <Button onClick={handleApprove} loading={processing}>
+                Approve
+              </Button>
 
-          {(
-            selectedDocument.status ===
-              "UPLOADED" ||
-            selectedDocument.status ===
-              "PENDING_REVIEW"
-          ) && (
-            <div
-              style={{
-                marginBottom: "25px",
-              }}
-            >
-              <button
-                type="button"
-                onClick={
-                  handleApprove
-                }
-                disabled={
-                  processing
-                }
-                style={{
-                  padding:
-                    "9px 18px",
-                  border: "none",
-                  borderRadius:
-                    "5px",
-                  cursor:
-                    processing
-                      ? "not-allowed"
-                      : "pointer",
-                  marginRight:
-                    "10px",
-                }}
+              <Button
+                variant="danger-outline"
+                onClick={handleReject}
+                disabled={processing}
               >
-                {processing
-                  ? "Processing..."
-                  : "Approve"}
-              </button>
-
-              <button
-                type="button"
-                onClick={
-                  handleReject
-                }
-                disabled={
-                  processing
-                }
-                style={{
-                  padding:
-                    "9px 18px",
-                  border: "none",
-                  borderRadius:
-                    "5px",
-                  cursor:
-                    processing
-                      ? "not-allowed"
-                      : "pointer",
-                }}
-              >
-                {processing
-                  ? "Processing..."
-                  : "Reject"}
-              </button>
+                Reject
+              </Button>
             </div>
           )}
 
-          {/* ==================================================
-              VERIFICATION HISTORY
-              ================================================== */}
+          {/* Verification history */}
+          <hr className="divider" />
 
-          <div
-            style={{
-              borderTop:
-                "1px solid #ddd",
-              paddingTop:
-                "20px",
-            }}
-          >
-            <h3
-              style={{
-                marginTop: 0,
-                marginBottom:
-                  "15px",
-              }}
+          <h3>Verification History</h3>
+
+          {historyLoading ? (
+            <LoadingState label="Loading verification history…" />
+          ) : verificationHistory.length === 0 ? (
+            <p className="secondary">No verification history found.</p>
+          ) : (
+            <Table
+              compact
+              columns={[
+                { key: "reviewer", label: "Reviewer" },
+                { key: "status", label: "Status" },
+                { key: "at", label: "Verified At" },
+                { key: "comments", label: "Comments" },
+              ]}
             >
-              Verification History
-            </h3>
+              {verificationHistory.map((verification) => (
+                <tr key={verification.id}>
+                  <td>
+                    {verification.reviewer_name ||
+                      verification.reviewer ||
+                      "—"}
+                  </td>
 
-            {historyLoading ? (
-              <p>
-                Loading verification
-                history...
-              </p>
-            ) : verificationHistory.length ===
-              0 ? (
-              <p
-                style={{
-                  color: "#666",
-                }}
-              >
-                No verification history
-                found.
-              </p>
-            ) : (
-              <div
-                style={{
-                  overflowX:
-                    "auto",
-                }}
-              >
-                <table
-                  style={{
-                    width: "100%",
-                    borderCollapse:
-                      "collapse",
-                    fontSize:
-                      "14px",
-                  }}
-                >
-                  <thead>
-                    <tr
-                      style={{
-                        backgroundColor:
-                          "#f5f5f5",
-                      }}
-                    >
-                      <th
-                        style={{
-                          padding:
-                            "10px",
-                          border:
-                            "1px solid #ddd",
-                          textAlign:
-                            "left",
-                        }}
-                      >
-                        Reviewer
-                      </th>
+                  <td>
+                    <DocumentStatusBadge status={verification.status} />
+                  </td>
 
-                      <th
-                        style={{
-                          padding:
-                            "10px",
-                          border:
-                            "1px solid #ddd",
-                          textAlign:
-                            "center",
-                        }}
-                      >
-                        Status
-                      </th>
+                  <td>{formatDate(verification.verified_at)}</td>
 
-                      <th
-                        style={{
-                          padding:
-                            "10px",
-                          border:
-                            "1px solid #ddd",
-                          textAlign:
-                            "left",
-                        }}
-                      >
-                        Verified At
-                      </th>
-
-                      <th
-                        style={{
-                          padding:
-                            "10px",
-                          border:
-                            "1px solid #ddd",
-                          textAlign:
-                            "left",
-                        }}
-                      >
-                        Comments
-                      </th>
-                    </tr>
-                  </thead>
-
-                  <tbody>
-                    {verificationHistory.map(
-                      (
-                        verification
-                      ) => (
-                        <tr
-                          key={
-                            verification.id
-                          }
-                        >
-                          <td
-                            style={{
-                              padding:
-                                "10px",
-                              border:
-                                "1px solid #ddd",
-                            }}
-                          >
-                            {verification.reviewer_name ||
-                              verification.reviewer ||
-                              "-"}
-                          </td>
-
-                          <td
-                            style={{
-                              padding:
-                                "10px",
-                              border:
-                                "1px solid #ddd",
-                              textAlign:
-                                "center",
-                            }}
-                          >
-                            <span
-                              style={{
-                                ...getStatusStyle(
-                                  verification.status
-                                ),
-                                display:
-                                  "inline-block",
-                                padding:
-                                  "4px 9px",
-                                borderRadius:
-                                  "10px",
-                                fontSize:
-                                  "11px",
-                                fontWeight:
-                                  "600",
-                              }}
-                            >
-                              {getStatusLabel(
-                                verification.status
-                              )}
-                            </span>
-                          </td>
-
-                          <td
-                            style={{
-                              padding:
-                                "10px",
-                              border:
-                                "1px solid #ddd",
-                            }}
-                          >
-                            {verification.verified_at ||
-                              "-"}
-                          </td>
-
-                          <td
-                            style={{
-                              padding:
-                                "10px",
-                              border:
-                                "1px solid #ddd",
-                            }}
-                          >
-                            {verification.comments ||
-                              "-"}
-                          </td>
-                        </tr>
-                      )
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </div>
-        </div>
+                  <td>{verification.comments || "—"}</td>
+                </tr>
+              ))}
+            </Table>
+          )}
+        </Modal>
       )}
 
-      {/* ==================================================
-          FOOTER ACTIONS
-          ================================================== */}
+      <p className="mt-3 flex">
+        <Button variant="ghost" size="sm" onClick={fetchData}>
+          ↻ Refresh
+        </Button>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "10px",
-          marginTop: "10px",
-        }}
-      >
-        <button
-          type="button"
-          onClick={fetchData}
-          disabled={loading}
-          style={{
-            padding: "9px 16px",
-            border:
-              "1px solid #ccc",
-            borderRadius:
-              "5px",
-            backgroundColor:
-              "#fff",
-            cursor: "pointer",
-          }}
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => navigate("/reviewer/travel-requests")}
         >
-          Refresh
-        </button>
-
-        <button
-          type="button"
-          onClick={() =>
-            navigate(
-              "/reviewer/travel-requests"
-            )
-          }
-          style={{
-            padding: "9px 16px",
-            border:
-              "1px solid #ccc",
-            borderRadius:
-              "5px",
-            backgroundColor:
-              "#fff",
-            cursor: "pointer",
-          }}
-        >
-          Back to Reviewer Requests
-        </button>
-      </div>
-
-      <WorkflowProgress
-        travelRequestId={id}
-      />
-
-      <TravelSections travelRequestId={id} />
-
-    </div>
+          ← Back to Review Queue
+        </Button>
+      </p>
+    </>
   );
 }
 

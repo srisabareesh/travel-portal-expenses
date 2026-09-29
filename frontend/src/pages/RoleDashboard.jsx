@@ -5,24 +5,22 @@ import ReviewerDashboard from "./ReviewerDashboard";
 import ManagerDashboard from "./ManagerDashboard";
 import AdminDashboard from "./AdminDashboard";
 import { hasAnyRole } from "../utils/roles";
+import { LoadingState, EmptyState, PageHeader } from "../components/ui";
 
 function RoleDashboard() {
   const { user, loading } = useAuth();
 
   if (loading) {
-    return (
-      <div style={{ padding: "30px" }}>
-        <h2>Loading...</h2>
-      </div>
-    );
+    return <LoadingState label="Loading your dashboard…" />;
   }
 
   if (!user) {
     return (
-      <div style={{ padding: "30px" }}>
-        <h2>User information not available</h2>
-        <p>Please log in again.</p>
-      </div>
+      <EmptyState
+        icon="👤"
+        title="User information not available"
+        description="Please log in again to continue."
+      />
     );
   }
 
@@ -45,24 +43,26 @@ function RoleDashboard() {
   }
 
   if (hasAnyRole(user, ["ADMIN"])) {
-    views.push(<AdminDashboard key="admin" />);
+    views.push(<AdminDashboard key="admin" showAsDashboard />);
   }
 
   if (views.length === 0) {
     return (
-      <div style={{ padding: "30px" }}>
-        <h1>Dashboard</h1>
-        <p>
-          Your roles (
-          {(user.roles || [user.role]).join(", ") ||
-            "none"}
-          ) do not map to a dashboard.
-        </p>
-      </div>
+      <>
+        <PageHeader
+          title="Dashboard"
+          description="Your account is not linked to any dashboard yet."
+        />
+        <EmptyState
+          icon="🗂️"
+          title="No dashboard available"
+          description="Your roles do not map to a dashboard. Please contact your administrator."
+        />
+      </>
     );
   }
 
-  return <div>{views}</div>;
+  return <div className="stack">{views}</div>;
 }
 
 export default RoleDashboard;

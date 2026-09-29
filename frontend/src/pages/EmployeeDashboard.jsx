@@ -1,67 +1,52 @@
 import { useAuth } from "../hooks/useAuth";
-import { useNavigate } from "react-router-dom";
+import { Link } from "react-router-dom";
 
 import NotificationList from "../components/NotificationList";
+import { PageHeader, Card } from "../components/ui";
 
 function EmployeeDashboard() {
-  const { user, logout } = useAuth();
-  const navigate = useNavigate();
+  const { user } = useAuth();
+
+  const displayName =
+    user?.first_name || user?.username || "there";
 
   return (
-    <div>
-      <h1>Onsite Travel Portal</h1>
+    <>
+      <PageHeader
+        title={`Welcome, ${displayName}`}
+        description={`${
+          user?.employee_id ? `${user.employee_id} · ` : ""
+        }${
+          user?.department || "Employee workspace"
+        } — plan, track, and settle your business travel.`}
+      />
 
-      <h2>Employee Dashboard</h2>
-
-      {user && (
-        <div>
-          <p>
-            Welcome,{" "}
-            <strong>
-              {user.first_name} {user.last_name}
-            </strong>
-          </p>
-
-          <p>
-            Employee ID: {user.employee_id}
-          </p>
-
-          <p>
-            Department: {user.department}
-          </p>
-        </div>
-      )}
-
-      <hr />
-
-      <h3>Travel Management</h3>
-
-      <div>
-        <button
-            onClick={() =>
-            navigate("/travel-requests/create")
-            }
+      <div className="page-section">
+        <Card
+          title="Travel management"
+          subtitle="Start a new request or follow the ones already in progress."
         >
-            Create Travel Request
-        </button>
+          <div className="btn-row">
+            <Link to="/travel-requests/create" className="btn btn--primary">
+              Create Travel Request
+            </Link>
 
-        <button
-            onClick={() =>
-            navigate("/travel-requests")
-            }
-        >
-            My Travel Requests
-        </button>
+            <Link to="/travel-requests" className="btn btn--secondary">
+              My Travel Requests
+            </Link>
+          </div>
+        </Card>
       </div>
 
-      <hr />
-
-      <NotificationList />
-
-      <button onClick={logout}>
-        Logout
-      </button>
-    </div>
+      <div className="page-section">
+        <Card
+          title="Notifications"
+          subtitle="Updates about your requests, documents, and expenses."
+        >
+          <NotificationList compact />
+        </Card>
+      </div>
+    </>
   );
 }
 

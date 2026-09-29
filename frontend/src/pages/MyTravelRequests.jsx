@@ -1,6 +1,22 @@
 import { useEffect, useState } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import apiClient from "../api/client";
+
+import {
+  PageHeader,
+  Card,
+  Button,
+  Table,
+  RequestStatusBadge,
+  TravelTypeBadge,
+  LoadingState,
+  EmptyState,
+  ErrorState,
+} from "../components/ui";
+import {
+  extractApiError,
+  travelWindow,
+} from "../lib/format";
 
 function MyTravelRequests() {
   const navigate = useNavigate();
@@ -9,127 +25,130 @@ function MyTravelRequests() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
+  const fetchTravelRequests = async () => {
+    try {
+      setLoading(true);
+      setError("");
+
+      const response = await apiClient.get(
+        "travel-requests/"
+      );
+
+      setTravelRequests(response.data);
+    } catch (err) {
+      setError(extractApiError(err, "Unable to load travel requests."));
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    const fetchTravelRequests = async () => {
-      try {
-        const response = await apiClient.get(
-          "travel-requests/"
-        );
-
-        setTravelRequests(response.data);
-      } catch (error) {
-        console.error(error);
-        setError(
-          "Unable to load travel requests."
-        );
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    fetchTravelRequests();
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- loader sets state after await
+    void fetchTravelRequests();
   }, []);
 
   if (loading) {
-    return <p>Loading travel requests...</p>;
+    return (
+      <>
+        <PageHeader
+          title="My Travel Requests"
+          description="Every request you have created, with its current stage."
+        />
+        <LoadingState label="Loading travel requests…" />
+      </>
+    );
   }
 
   return (
-    <div>
-      <h1>My Travel Requests</h1>
-
-      {error && (
-        <p style={{ color: "red" }}>
-          {error}
-        </p>
-      )}
-
-      {travelRequests.length === 0 ? (
-        <div>
-          <p>
-            You have not created any travel requests yet.
-          </p>
-
-          <button
-            onClick={() =>
-              navigate("/travel-requests/create")
-            }
-          >
+    <>
+      <PageHeader
+        title="My Travel Requests"
+        description="Every request you have created, with its current stage."
+        actions={
+          <Link to="/travel-requests/create" className="btn btn--primary">
             Create Travel Request
-          </button>
-        </div>
+          </Link>
+        }
+      />
+
+      {error && travelRequests.length === 0 ? (
+        <ErrorState
+          title="Unable to load travel requests"
+          message={error}
+          onRetry={fetchTravelRequests}
+        />
+      ) : travelRequests.length === 0 ? (
+        <Card>
+          <EmptyState
+            icon="🧾"
+            title="No travel requests yet"
+            description="Create your first travel request to get started — it only takes a minute."
+            action={
+              <Link to="/travel-requests/create" className="btn btn--primary">
+                Create Travel Request
+              </Link>
+            }
+          />
+        </Card>
       ) : (
-        <div>
+        <Table
+          columns={[
+            { key: "request", label: "Request" },
+            { key: "destination", label: "Destination" },
+            { key: "type", label: "Travel Type" },
+            { key: "dates", label: "Travel Dates" },
+            { key: "status", label: "Status" },
+            { key: "action", label: "Action", align: "right" },
+          ]}
+        >
           {travelRequests.map((request) => (
-            <div
-              key={request.id}
-              style={{
-                border: "1px solid #ccc",
-                padding: "15px",
-                marginBottom: "15px",
-                borderRadius: "8px",
-              }}
-            >
-              <h3>
-                {request.request_number}
-              </h3>
+            <tr key={request.id}>
+              <td>
+                <div className="cell-strong mono">{request.request_number}</div>
+                <div className="cell-secondary">{request.client || "—"}</div>
+              </td>
 
-              <p>
-                <strong>Destination:</strong>{" "}
-                {request.country_name},{" "}
-                {request.destination_city}
-              </p>
+              <td>
+                <div className="cell-strong">
+                  {request.destination_city || "—"}
+                </div>
+                <div className="cell-secondary">
+                  {request.country_name || request.destination_country || ""}
+                </div>
+              </td>
 
-              <p>
-                <strong>Client:</strong>{" "}
-                {request.client}
-              </p>
+              <td>
+                <TravelTypeBadge type={request.travel_type} />
+              </td>
 
-              <p>
-                <strong>Project:</strong>{" "}
-                {request.project}
-              </p>
+              <td>{travelWindow(request.start_date, request.end_date)}</td>
 
-              <p>
-                <strong>Travel Type:</strong>{" "}
-                {request.travel_type}
-              </p>
+              <td>
+                <RequestStatusBadge status={request.status} />
+              </td>
 
-              <p>
-                <strong>Start Date:</strong>{" "}
-                {request.start_date}
-              </p>
-
-              <p>
-                <strong>End Date:</strong>{" "}
-                {request.end_date}
-              </p>
-
-              <p>
-                <strong>Status:</strong>{" "}
-                {request.status}
-              </p>
-
-              <button
-                onClick={() =>
-                  navigate(
-                    `/travel-requests/${request.id}`
-                  )
-                }
-              >
-                View Details
-              </button>
-            </div>
+              <td style={{ textAlign: "right" }}>
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  onClick={() =>
+                    navigate(`/travel-requests/${request.id}`)
+                  }
+                >
+                  View Details
+                </Button>
+              </td>
+            </tr>
           ))}
-        </div>
+        </Table>
       )}
 
-      <button
-        onClick={() => navigate("/dashboard")}
-      >
-        Back to Dashboard
-      </button>
-    </div>
+      <p className="mt-3">
+        <Button variant="ghost" size="sm" onClick={() => navigate("/dashboard")}>
+          ← Back to Dashboard
+        </Button>
+      </p>
+    </>
   );
 }
 

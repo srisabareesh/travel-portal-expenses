@@ -1,15 +1,23 @@
 import { useEffect, useState } from "react";
-import { useAuth } from "../hooks/useAuth";
 import apiClient from "../api/client";
 
 import NotificationList from "../components/NotificationList";
+import {
+  PageHeader,
+  Card,
+  Tabs,
+  EmptyState,
+  InlineError,
+  LoadingState,
+} from "../components/ui";
+import { roleLabel, formatDateTime } from "../lib/format";
 
 function AdminDashboard() {
-  const { user, logout } = useAuth();
-
   const [users, setUsers] = useState([]);
   const [auditLogs, setAuditLogs] = useState([]);
   const [loadError, setLoadError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [activeTab, setActiveTab] = useState("users");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -34,123 +42,152 @@ function AdminDashboard() {
           "Administrator list APIs are not enabled yet. Use the Django admin for full configuration."
         );
       }
+
+      setLoading(false);
     };
 
     fetchData();
   }, []);
 
+  const tabs = [
+    { key: "users", label: "Users" },
+    { key: "audit", label: "Audit Logs" },
+    { key: "config", label: "Configuration" },
+  ];
+
   return (
-    <div style={{ padding: "30px" }}>
-      <h1>Admin Dashboard</h1>
+    <>
+      <PageHeader
+        title="Administration"
+        description="Users, roles, and system configuration for the travel portal."
+      />
 
-      {user && (
-        <p>
-          Signed in as{" "}
-          <strong>{user.username}</strong> (administrator)
-        </p>
-      )}
+      <InlineError>{loadError}</InlineError>
 
-      <p>
-        Administrative configuration is managed through the
-        Django admin console:
-      </p>
+      <Tabs
+        tabs={tabs}
+        activeKey={activeTab}
+        onChange={setActiveTab}
+      />
 
-      <ul>
-        <li>
-          <a
-            href="http://127.0.0.1:8000/admin/"
-            target="_blank"
-            rel="noreferrer"
-          >
-            Django Admin — users, roles, countries,
-            document types & requirements, expense data,
-            system configuration, audit logs
-          </a>
-        </li>
-      </ul>
+      {loading ? (
+        <LoadingState label="Loading administration data…" />
+      ) : (
+        <>
+          {activeTab === "users" && (
+            <Card title="Users" subtitle="Employee IDs and assigned roles." padded={false}>
+              {users.length === 0 ? (
+                <EmptyState
+                  icon="👥"
+                  title="No user list available"
+                  description="User management is available through the Django admin console."
+                />
+              ) : (
+                <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Employee ID</th>
+                        <th>Username</th>
+                        <th>Roles</th>
+                      </tr>
+                    </thead>
 
-      {loadError && (
-        <p style={{ color: "#8a6500" }}>{loadError}</p>
-      )}
+                    <tbody>
+                      {users.map((item) => (
+                        <tr key={item.id}>
+                          <td className="cell-strong mono">{item.employee_id}</td>
 
-      <div
-        style={{
-          display: "flex",
-          gap: "20px",
-          flexWrap: "wrap",
-          marginTop: "20px",
-        }}
-      >
-        <div
-          style={{
-            flex: "1 1 300px",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            padding: "20px",
-          }}
-        >
-          <h3>Users ({users.length})</h3>
+                          <td>{item.username}</td>
 
-          {users.length === 0 ? (
-            <p>No user list available.</p>
-          ) : (
-            <table style={{ width: "100%" }}>
-              <thead>
-                <tr>
-                  <th align="left">Employee ID</th>
-                  <th align="left">Username</th>
-                  <th align="left">Roles</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {users.map((item) => (
-                  <tr key={item.id}>
-                    <td>{item.employee_id}</td>
-
-                    <td>{item.username}</td>
-
-                    <td>
-                      {(item.roles || []).join(", ")}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
+                          <td>
+                            <div className="flex" style={{ gap: 6 }}>
+                              {(item.roles || []).map((role) => (
+                                <span key={role} className="badge badge--neutral">
+                                  {roleLabel(role)}
+                                </span>
+                              ))}
+                            </div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
           )}
-        </div>
 
-        <div
-          style={{
-            flex: "1 1 300px",
-            border: "1px solid #ddd",
-            borderRadius: "8px",
-            padding: "20px",
-          }}
-        >
-          <h3>Recent Audit Logs</h3>
+          {activeTab === "audit" && (
+            <Card title="Recent audit logs" padded={false}>
+              {auditLogs.length === 0 ? (
+                <EmptyState
+                  icon="🗂️"
+                  title="No audit entries visible"
+                  description="Audit logs will appear here as actions are recorded."
+                />
+              ) : (
+                <div className="table-wrap" style={{ border: "none", boxShadow: "none" }}>
+                  <table className="table">
+                    <thead>
+                      <tr>
+                        <th>Action</th>
+                        <th>Object</th>
+                        <th>When</th>
+                      </tr>
+                    </thead>
 
-          {auditLogs.length === 0 ? (
-            <p>No audit entries visible.</p>
-          ) : (
-            auditLogs.slice(0, 10).map((log) => (
-              <p key={log.id}>
-                <strong>{log.action}</strong> —{" "}
-                {log.object_repr} (
-                {new Date(
-                  log.created_at
-                ).toLocaleString()}
-                )
+                    <tbody>
+                      {auditLogs.slice(0, 10).map((log) => (
+                        <tr key={log.id}>
+                          <td className="cell-strong">{log.action}</td>
+
+                          <td>{log.object_repr}</td>
+
+                          <td>{formatDateTime(log.created_at)}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </Card>
+          )}
+
+          {activeTab === "config" && (
+            <Card
+              title="Configuration"
+              subtitle="Full configuration is managed through the Django admin console."
+            >
+              <p className="secondary">
+                Countries, document types & requirements, expense rules, and
+                system settings live in the Django admin.
               </p>
-            ))
+
+              <div className="btn-row">
+                <a
+                  href="http://127.0.0.1:8000/admin/"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="btn btn--secondary"
+                >
+                  Open Django Admin ↗
+                </a>
+              </div>
+            </Card>
           )}
-        </div>
+        </>
+      )}
+
+      <div className="page-section">
+        <Card
+          title="Notifications"
+          subtitle="System activity on your requests."
+        >
+          <NotificationList compact />
+        </Card>
       </div>
-
-      <NotificationList />
-
-      <button onClick={logout}>Logout</button>
-    </div>
+    </>
   );
 }
 

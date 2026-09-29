@@ -1,53 +1,59 @@
-import { useNavigate } from "react-router-dom";
+import { useNavigate, Link } from "react-router-dom";
 import { useAuth } from "../hooks/useAuth";
 
 import NotificationList from "../components/NotificationList";
+import { PageHeader, Card, Button } from "../components/ui";
 
 function ReviewerDashboard() {
   const navigate = useNavigate();
-  const { user, logout } = useAuth();
+  const { user } = useAuth();
 
   return (
-    <div style={{ padding: "30px" }}>
-      <h1>Reviewer Dashboard</h1>
+    <>
+      <PageHeader
+        title={`Welcome, ${user?.first_name || user?.username || "Reviewer"}`}
+        description="Verify employee travel documents and keep international requests moving."
+      />
 
-      <p>
-        Welcome,{" "}
-        <strong>
-          {user?.first_name || user?.username}
-        </strong>
-      </p>
+      <div className="page-section">
+        <Card
+          title="Document verification"
+          subtitle="Requests waiting for document review appear in your queue."
+          actions={
+            <Button variant="primary" onClick={() => navigate("/reviewer/travel-requests")}>
+              Open Review Queue
+            </Button>
+          }
+        >
+          <p className="secondary mb-0">
+            You will verify uploaded documents, record visa decisions, and
+            check expenses as requests progress.
+          </p>
+        </Card>
+      </div>
 
-      <p>
-        Role: <strong>{user?.role}</strong>
-      </p>
+      <div className="page-section">
+        <Card
+          title="Notifications"
+          subtitle="Requests that need your attention."
+        >
+          <NotificationList compact />
+        </Card>
+      </div>
 
-      <hr />
-
-      <h2>Document Verification</h2>
-
-      <p>
-        Review travel requests and verify employee
-        documents.
-      </p>
-
-      <button
-        onClick={() =>
-          navigate("/reviewer/travel-requests")
-        }
-      >
-        Review Travel Requests
-      </button>
-
-      <NotificationList />
-
-      <br />
-      <br />
-
-      <button onClick={logout}>
-        Logout
-      </button>
-    </div>
+      <div className="page-section">
+        <Card title="Quick links">
+          <div className="btn-row">
+            <Link to="/reviewer/travel-requests" className="btn btn--secondary">
+              Review Queue
+            </Link>
+            <Link to="/notifications" className="btn btn--secondary">
+              All Notifications
+            </Link>
+          </div>
+        </Card>
+      </div>
+    </>
   );
 }
 
