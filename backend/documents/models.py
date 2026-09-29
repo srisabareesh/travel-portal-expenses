@@ -42,6 +42,14 @@ class DocumentRequirement(models.Model):
         PROJECT = "PROJECT", "Project"
         OTHER = "OTHER", "Other"
 
+        # Phase 3.1: new travel types, kept in sync
+        # with TravelRequest.TravelType so requirements
+        # can match the new travel requests.
+        # Legacy values above are kept so historical
+        # requirements keep working unchanged.
+        DOMESTIC = "DOMESTIC", "Domestic"
+        INTERNATIONAL = "INTERNATIONAL", "International"
+
     country = models.ForeignKey(
         Country,
         on_delete=models.CASCADE,

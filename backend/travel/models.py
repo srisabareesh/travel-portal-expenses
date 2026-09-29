@@ -40,6 +40,12 @@ class TravelRequest(models.Model):
         PROJECT = "PROJECT", "Project"
         OTHER = "OTHER", "Other"
 
+        # Phase 3.1: new travel types.
+        # Legacy values above are kept so historical
+        # records keep working unchanged.
+        DOMESTIC = "DOMESTIC", "Domestic"
+        INTERNATIONAL = "INTERNATIONAL", "International"
+
     class Status(models.TextChoices):
         DRAFT = "DRAFT", "Draft"
         SUBMITTED = "SUBMITTED", "Submitted"
