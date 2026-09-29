@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 import apiClient from "../api/client";
 
-import { AuthContext } from "./authContext";
+import { AuthContext } from "./auth-context.js";
 
 export function AuthProvider({ children }) {
   const [isAuthenticated, setIsAuthenticated] = useState(
