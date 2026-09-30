@@ -111,7 +111,7 @@ function ManagerTravelRequests() {
               </td>
 
               <td>
-                {request.employee_name || request.employee || "—"}
+                {request.employee_name || "—"}
               </td>
 
               <td>

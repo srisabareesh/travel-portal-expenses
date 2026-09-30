@@ -11,7 +11,9 @@ from travel.services import (
     ACTION_APPROVE_SETTLEMENT,
     ACTION_START_SETTLEMENT_APPROVAL,
     ACTION_START_SETTLEMENT_PROCESSING,
+    Status,
     WorkflowError,
+    get_effective_status,
     validate_transition,
 )
 from users.permissions import (
@@ -36,6 +38,108 @@ def _get_travel_request(travel_request_id):
     )
 
 
+# Workflow stages in which expenses may be entered by the
+# employee. TRAVEL_IN_PROGRESS is the trip itself
+# (expenses may be recorded while travelling),
+# EXPENSE_SUBMISSION is the dedicated expense-entry stage,
+# and EXPENSE_VERIFICATION stays open for late receipts
+# until the reviewer calculates the settlement (unverified
+# expenses are simply excluded from it). Derived from the
+# central workflow engine, never a second workflow
+# definition.
+_EXPENSE_ENTRY_STATUSES = (
+    Status.TRAVEL_IN_PROGRESS,
+    Status.EXPENSE_SUBMISSION,
+    Status.EXPENSE_VERIFICATION,
+)
+
+
+# Workflow stages in which Reviewer/HR may configure the
+# approved expense limits and the advance: after manager
+# approval (or visa approval for international travel)
+# and up to the end of the expense stages, so the limits
+# exist before the settlement is calculated.
+_EXPENSE_CONFIG_STATUSES = (
+    Status.MANAGER_APPROVED,
+    Status.VISA_APPROVED,
+    Status.TRAVEL_BOOKING,
+    Status.TRAVEL_BOOKED,
+    Status.TRAVEL_IN_PROGRESS,
+    Status.EXPENSE_SUBMISSION,
+    Status.EXPENSE_VERIFICATION,
+)
+
+
+def _is_reviewer_or_manager(user):
+    return user.has_role("REVIEWER") or user.has_role(
+        "MANAGER"
+    )
+
+
+def _can_view_request(user, travel_request):
+    """
+    Object-level read visibility shared by the expense,
+    configuration and settlement endpoints:
+
+      EMPLOYEE  only their own request,
+      REVIEWER/MANAGER  any request in the application
+                (matches the existing reviewer scope in
+                travel.views.TravelRequestViewSet, which
+                grants reviewers the new workflow and
+                managers their own + team requests),
+      ADMIN     everything.
+    """
+
+    if travel_request.employee == user:
+        return True
+
+    if user.has_role("ADMIN"):
+        return True
+
+    return _is_reviewer_or_manager(user)
+
+
+def _can_view_team_scope(user, travel_request):
+    """
+    Manager visibility follows the existing manager/team
+    model: own requests plus direct team members' requests
+    (travel.views.TravelRequestViewSet). Reviewers see the
+    new workflow; admins see everything.
+    """
+
+    if travel_request.employee == user:
+        return True
+
+    if user.has_role("ADMIN"):
+        return True
+
+    if user.has_role("REVIEWER"):
+        return True
+
+    if user.has_role("MANAGER"):
+        return travel_request.employee.manager == user
+
+    return False
+
+
+def _effective_status(travel_request):
+    """
+    Fold legacy statuses onto their new equivalents for
+    stage guarding (interpretation only: the stored value
+    is never rewritten). Legacy travel types keep their
+    stored status, matching validate_transition.
+    """
+
+    from travel.services import is_legacy_travel_type
+
+    if is_legacy_travel_type(
+        travel_request.travel_type
+    ):
+        return travel_request.status
+
+    return get_effective_status(travel_request)
+
+
 class ExpenseConfigurationView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -44,6 +148,23 @@ class ExpenseConfigurationView(APIView):
         travel_request = _get_travel_request(
             travel_request_id
         )
+
+        ##Employees may read their own limits; reviewer
+        ##and manager may read for any visible request.
+        is_owner = (
+            travel_request.employee == request.user
+        )
+
+        if not (
+            is_owner
+            or request.user.has_role("REVIEWER")
+            or request.user.has_role("MANAGER")
+            or request.user.has_role("ADMIN")
+        ):
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         config = getattr(
             travel_request,
@@ -71,13 +192,39 @@ class ExpenseConfigurationView(APIView):
             travel_request_id
         )
 
-        if not (
-            request.user.has_role("REVIEWER")
-            or request.user.has_role("MANAGER")
+        ##Limits (maximum approved expenses and the
+        ##advance) are configured by REVIEWER/HR only.
+        if not request.user.has_role("REVIEWER"):
+            return Response(
+                {
+                    "detail": (
+                        "Only Reviewer/HR can configure "
+                        "expense limits and the advance."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
+        ##Stage guard (backend-authoritative): limits may
+        ##only be configured after the request has been
+        ##approved/visa-approved and before the settlement
+        ##is calculated. Uses the workflow engine's status
+        ##folding so legacy records behave consistently.
+        if (
+            _effective_status(travel_request)
+            not in _EXPENSE_CONFIG_STATUSES
         ):
             return Response(
-                {"detail": "Permission denied."},
-                status=status.HTTP_403_FORBIDDEN,
+                {
+                    "detail": (
+                        "Expense limits can only be "
+                        "configured after the request has "
+                        "been approved and before the "
+                        "settlement is calculated. Current "
+                        f"status: {travel_request.status}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         config = getattr(
@@ -123,15 +270,9 @@ class ExpenseListCreateView(APIView):
             travel_request_id
         )
 
-        is_owner = (
-            travel_request.employee == request.user
-        )
-
-        if not (
-            is_owner
-            or request.user.has_role("REVIEWER")
-            or request.user.has_role("MANAGER")
-            or request.user.has_role("ADMIN")
+        if not _can_view_request(
+            request.user,
+            travel_request,
         ):
             return Response(
                 {"detail": "Not found."},
@@ -164,6 +305,29 @@ class ExpenseListCreateView(APIView):
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        ##Stage guard (backend-authoritative): expenses may
+        ##only be entered while the trip is in progress or
+        ##during the expense submission / verification
+        ##stages. The workflow engine's effective status
+        ##keeps the guard consistent with the central
+        ##workflow.
+        if (
+            _effective_status(travel_request)
+            not in _EXPENSE_ENTRY_STATUSES
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Expenses can only be submitted "
+                        "while the trip is in progress "
+                        "or during the expense stages. "
+                        "Current status: "
+                        f"{travel_request.status}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         serializer = ExpenseSerializer(
@@ -231,6 +395,20 @@ class ExpenseVerifyView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        ##Self-verification is never allowed, regardless of
+        ##additional roles: a user holding both EMPLOYEE and
+        ##REVIEWER must not verify their own expense.
+        if expense.submitted_by == request.user:
+            return Response(
+                {
+                    "detail": (
+                        "You cannot verify or reject your "
+                        "own expense."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         if (
             decision == Expense.Status.REJECTED
             and not (
@@ -282,6 +460,14 @@ def _workflow_transition(
     return target, None
 
 
+def _settlement_calculated(travel_request):
+    return getattr(
+        travel_request,
+        "settlement",
+        None,
+    ) is not None
+
+
 class SettlementView(APIView):
 
     permission_classes = [IsAuthenticated]
@@ -290,6 +476,18 @@ class SettlementView(APIView):
         travel_request = _get_travel_request(
             travel_request_id
         )
+
+        ##Object-level visibility: the employee sees their
+        ##own settlement, reviewers/managers follow the
+        ##existing reviewer/manager scope, admin sees all.
+        if not _can_view_team_scope(
+            request.user,
+            travel_request,
+        ):
+            return Response(
+                {"detail": "Not found."},
+                status=status.HTTP_404_NOT_FOUND,
+            )
 
         settlement = getattr(
             travel_request,
@@ -320,6 +518,27 @@ class SettlementCalculateView(APIView):
             travel_request_id
         )
 
+        ##A settlement is calculated exactly once: if a
+        ##record already exists the calculation is never
+        ##repeated (refresh happens only through the
+        ##explicit approval/processing steps).
+        if getattr(
+            travel_request,
+            "settlement",
+            None,
+        ) is not None:
+            settlement = travel_request.settlement
+
+            return Response(
+                {
+                    "detail": (
+                        "The settlement has already been "
+                        "calculated."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
         target, error = _workflow_transition(
             travel_request,
             "settle",
@@ -328,7 +547,15 @@ class SettlementCalculateView(APIView):
 
         if error is not None:
             return Response(
-                {"detail": error.message},
+                {
+                    "detail": (
+                        "Settlement can only be calculated "
+                        "after expenses are verified (the "
+                        "request must be in expense "
+                        "verification). Current status: "
+                        f"{travel_request.status}."
+                    )
+                },
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
@@ -384,6 +611,19 @@ class SettlementActionView(APIView):
             )
 
         action_name = action_map[action][0]
+
+        ##A settlement must exist before any approval or
+        ##processing step runs.
+        if not _settlement_calculated(travel_request):
+            return Response(
+                {
+                    "detail": (
+                        "The settlement has not been "
+                        "calculated yet."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
         ##Authorization mirrors the workflow engine's roles.
         if action_name == ACTION_APPROVE_SETTLEMENT:

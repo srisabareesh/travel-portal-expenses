@@ -7,6 +7,20 @@ from .services import (
 )
 
 
+def _user_display_name(user):
+    """
+    Prefer the full name; fall back to the username so a
+    request never renders as a bare numeric id.
+    """
+
+    if user is None:
+        return ""
+
+    full_name = (user.get_full_name() or "").strip()
+
+    return full_name or user.get_username()
+
+
 class CountrySerializer(serializers.ModelSerializer):
 
     class Meta:
@@ -24,10 +38,7 @@ class TravelRequestSerializer(
     serializers.ModelSerializer
 ):
 
-    employee_name = serializers.CharField(
-        source="employee.get_full_name",
-        read_only=True,
-    )
+    employee_name = serializers.SerializerMethodField()
 
     country_name = serializers.CharField(
         source="destination_country.name",
@@ -79,6 +90,10 @@ class TravelRequestSerializer(
                 "required": False,
             },
         }
+
+    def get_employee_name(self, obj):
+
+        return _user_display_name(obj.employee)
 
     def get_travel_type_is_legacy(self, obj):
 

@@ -1,5 +1,6 @@
 from rest_framework import serializers
 
+from .currency import CURRENCY_ERROR_MESSAGE, CURRENCIES
 from .models import Expense, ExpenseConfiguration, Settlement
 
 
@@ -42,18 +43,39 @@ class ExpenseConfigurationSerializer(
             "updated_at",
         )
 
+    def validate_currency(self, value):
+
+        if not value:
+            return value
+
+        normalized = str(value).strip().upper()
+
+        if normalized not in CURRENCIES:
+            raise serializers.ValidationError(
+                CURRENCY_ERROR_MESSAGE
+            )
+
+        return normalized
+
+
+def _user_display_name(user):
+    """
+    Prefer the full name; fall back to the username.
+    """
+
+    if user is None:
+        return ""
+
+    full_name = (user.get_full_name() or "").strip()
+
+    return full_name or user.get_username()
+
 
 class ExpenseSerializer(serializers.ModelSerializer):
 
-    submitted_by_name = serializers.CharField(
-        source="submitted_by.get_full_name",
-        read_only=True,
-    )
+    submitted_by_name = serializers.SerializerMethodField()
 
-    reviewed_by_name = serializers.CharField(
-        source="reviewed_by.get_full_name",
-        read_only=True,
-    )
+    reviewed_by_name = serializers.SerializerMethodField()
 
     class Meta:
         model = Expense
@@ -88,6 +110,14 @@ class ExpenseSerializer(serializers.ModelSerializer):
             "updated_at",
         )
 
+    def get_submitted_by_name(self, obj):
+
+        return _user_display_name(obj.submitted_by)
+
+    def get_reviewed_by_name(self, obj):
+
+        return _user_display_name(obj.reviewed_by)
+
     def validate_amount(self, value):
 
         if value is None or value <= 0:
@@ -96,6 +126,20 @@ class ExpenseSerializer(serializers.ModelSerializer):
             )
 
         return value
+
+    def validate_currency(self, value):
+
+        if not value:
+            return value
+
+        normalized = str(value).strip().upper()
+
+        if normalized not in CURRENCIES:
+            raise serializers.ValidationError(
+                CURRENCY_ERROR_MESSAGE
+            )
+
+        return normalized
 
     def validate_category(self, value):
 
@@ -155,20 +199,23 @@ class SettlementSerializer(
     serializers.ModelSerializer
 ):
 
-    approved_by_name = serializers.CharField(
-        source="approved_by.get_full_name",
-        read_only=True,
-    )
+    approved_by_name = serializers.SerializerMethodField()
 
-    processed_by_name = serializers.CharField(
-        source="processed_by.get_full_name",
-        read_only=True,
-    )
+    processed_by_name = serializers.SerializerMethodField()
 
-    calculated_by_name = serializers.CharField(
-        source="calculated_by.get_full_name",
-        read_only=True,
-    )
+    calculated_by_name = serializers.SerializerMethodField()
+
+    def get_approved_by_name(self, obj):
+
+        return _user_display_name(obj.approved_by)
+
+    def get_processed_by_name(self, obj):
+
+        return _user_display_name(obj.processed_by)
+
+    def get_calculated_by_name(self, obj):
+
+        return _user_display_name(obj.calculated_by)
 
     class Meta:
         model = Settlement

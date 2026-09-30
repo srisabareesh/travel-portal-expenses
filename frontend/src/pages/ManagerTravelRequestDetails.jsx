@@ -3,7 +3,9 @@ import { useNavigate, useParams } from "react-router-dom";
 
 import apiClient from "../api/client";
 
+import { useAuth } from "../hooks/useAuth";
 import WorkflowProgress from "../components/WorkflowProgress";
+import DocumentsCard from "../components/DocumentsCard";
 import TravelSections from "../components/TravelSections";
 import {
   PageHeader,
@@ -24,6 +26,7 @@ import { formatDate, travelWindow } from "../lib/format";
 function ManagerTravelRequestDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [travelRequest, setTravelRequest] = useState(null);
   const [checklist, setChecklist] = useState([]);
@@ -230,7 +233,11 @@ function ManagerTravelRequestDetails() {
     return null;
   }
 
+  /*The manager decides while the request is in the
+    MANAGER_APPROVAL stage (legacy requests keep the old
+    DOCUMENT_VERIFICATION hand-off status).*/
   const canDecide =
+    travelRequest.status === "MANAGER_APPROVAL" ||
     travelRequest.status === "DOCUMENT_VERIFICATION";
 
   return (
@@ -339,7 +346,7 @@ function ManagerTravelRequestDetails() {
           <div>
             <div className="meta-item-label">Employee</div>
             <div className="meta-item-value">
-              {travelRequest.employee_name || travelRequest.employee || "—"}
+              {travelRequest.employee_name || "—"}
             </div>
           </div>
 
@@ -410,10 +417,17 @@ function ManagerTravelRequestDetails() {
         </div>
       </Card>
 
-      {/* Workflow + business sections */}
+      {/* Workflow + guidance, then documents, then the
+          visa/booking/expense/settlement sections. */}
       <WorkflowProgress travelRequestId={id} />
 
-      <TravelSections travelRequestId={id} />
+      <DocumentsCard checklist={checklist} />
+
+      <TravelSections
+        travelRequestId={id}
+        travelRequest={travelRequest}
+        user={user}
+      />
 
       {/* Document verification summary */}
       <Card

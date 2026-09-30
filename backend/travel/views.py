@@ -102,10 +102,12 @@ _ACTION_ROLES = {
     ACTION_REJECT: ("MANAGER",),
     ACTION_CANCEL: ("EMPLOYEE", "MANAGER", "ADMIN"),
     ACTION_START_VISA: ("REVIEWER",),
-    ACTION_VISA_DECIDE: ("REVIEWER",),
+    ACTION_VISA_DECIDE: ("EMPLOYEE",),
     ACTION_START_BOOKING: ("REVIEWER",),
     ACTION_COMPLETE_BOOKING: ("REVIEWER",),
     ACTION_START_TRAVEL: ("EMPLOYEE", "REVIEWER"),
+    # Note: start_travel for the employee is additionally
+    # restricted to their own request below.
     ACTION_SUBMIT_EXPENSES: ("EMPLOYEE",),
     ACTION_START_EXPENSE_REVIEW: ("REVIEWER",),
     ACTION_SETTLE: ("REVIEWER",),
@@ -196,9 +198,36 @@ def _check_action_authorization(
                 "cancel this travel request."
             )
 
+    elif action == ACTION_CLOSE:
+        ##Closing a request is the owner's acknowledgement
+        ##that the trip is finished. A manager or admin may
+        ##close on the owner's behalf; another employee
+        ##never can.
+        if (
+            not is_owner
+            and not _user_has_any_role(
+                user, ("MANAGER", "ADMIN")
+            )
+        ):
+            raise _PermissionDenied(
+                "You do not have permission to "
+                "close this travel request."
+            )
+
+    elif action == ACTION_START_TRAVEL:
+        ##Starting travel is the employee's own trip
+        ##action; a reviewer may do it on the travel
+        ##desk's behalf. Another employee never can.
+        if not is_owner and not user.has_role(
+            "REVIEWER"
+        ):
+            raise _PermissionDenied(
+                "You do not have permission to start "
+                "this travel."
+            )
+
     elif action in (
         ACTION_START_VISA,
-        ACTION_VISA_DECIDE,
         ACTION_START_BOOKING,
         ACTION_COMPLETE_BOOKING,
         ACTION_SETTLE,
@@ -223,6 +252,16 @@ def _check_action_authorization(
         ACTION_START_SETTLEMENT_PROCESSING,
     ):
         pass
+
+    elif action == ACTION_VISA_DECIDE:
+        ##The visa status is the EMPLOYEE's responsibility.
+        ##Reviewer/HR and managers never update it (they
+        ##may still start the visa stage itself).
+        if not is_owner:
+            raise _PermissionDenied(
+                "Only the employee travelling can update "
+                "the visa status of their own request."
+            )
 
 
 def _apply_workflow_transition(
@@ -545,38 +584,23 @@ class WorkflowActionViewSetMixin:
         url_path="visa-decide",
     )
     def visa_decide(self, request, pk=None):
-        decision = (
-            request.data.get("decision", "")
-            if isinstance(request.data, dict)
-            else ""
-        )
+        """
+        Deprecated workflow-level visa decision endpoint:
+        the visa status belongs to the visa module
+        (employee-only, at .../visa/decision/). This
+        endpoint now only reports where to go.
+        """
 
-        if decision not in ("APPROVED", "REJECTED"):
-            return Response(
-                {
-                    "decision": (
-                        "Decision must be APPROVED "
-                        "or REJECTED."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        if decision == "REJECTED":
-            return Response(
-                {
-                    "detail": (
-                        "Visa rejection handling is "
-                        "part of the visa module."
-                    )
-                },
-                status=status.HTTP_400_BAD_REQUEST,
-            )
-
-        return _transition_response(
-            self,
-            request,
-            ACTION_VISA_DECIDE,
+        return Response(
+            {
+                "detail": (
+                    "Visa updates have moved to "
+                    "POST /api/travel-requests/{id}/visa/decision/ "
+                    "and are recorded by the travelling "
+                    "employee."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     @action(
@@ -645,10 +669,23 @@ class WorkflowActionViewSetMixin:
         url_path="settle",
     )
     def settle(self, request, pk=None):
-        return _transition_response(
-            self,
-            request,
-            ACTION_SETTLE,
+        """
+        Deprecated workflow-level settlement endpoint:
+        settlement calculation lives in the settlement
+        module (POST .../settlement/calculate/), which
+        advances the request AND stores the settlement.
+        This endpoint now only reports where to go.
+        """
+
+        return Response(
+            {
+                "detail": (
+                    "Settlement calculation has moved to "
+                    "POST /api/travel-requests/{id}/settlement/calculate/ "
+                    "(Reviewer/HR)."
+                )
+            },
+            status=status.HTTP_400_BAD_REQUEST,
         )
 
     @action(
@@ -726,9 +763,22 @@ class WorkflowActionViewSetMixin:
             travel_request
         )
 
+        ##Allowed actions are filtered by the caller's
+        ##role so the UI only offers what this user may
+        ##actually perform (the backend still enforces
+        ##every permission on the action endpoints).
         progress["allowed_actions"] = (
             get_allowed_actions(travel_request)
         )
+
+        progress["my_allowed_actions"] = [
+            action_name
+            for action_name in progress["allowed_actions"]
+            if _user_has_any_role(
+                request.user,
+                _ACTION_ROLES.get(action_name, ()),
+            )
+        ]
 
         return Response(
             progress,

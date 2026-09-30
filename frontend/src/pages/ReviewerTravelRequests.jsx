@@ -110,7 +110,7 @@ function ReviewerTravelRequests() {
               </td>
 
               <td>
-                {request.employee_name || `Employee ID: ${request.employee}`}
+                {request.employee_name || "—"}
               </td>
 
               <td>

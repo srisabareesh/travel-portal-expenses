@@ -68,6 +68,13 @@ class FlightBooking(models.Model):
         default="",
     )
 
+    ##Phase 21 (additive migration): free-form notes from
+    ##the reviewer recording the booking.
+    notes = models.TextField(
+        blank=True,
+        default="",
+    )
+
     cost = models.DecimalField(
         max_digits=12,
         decimal_places=2,
@@ -154,6 +161,19 @@ class HotelBooking(models.Model):
 
     location = models.CharField(
         max_length=200,
+        blank=True,
+        default="",
+    )
+
+    ##Phase 21 (additive migration): the hotel's address.
+    address = models.TextField(
+        blank=True,
+        default="",
+    )
+
+    ##Phase 21 (additive migration): free-form notes from
+    ##the reviewer recording the booking.
+    notes = models.TextField(
         blank=True,
         default="",
     )

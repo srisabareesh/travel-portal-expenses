@@ -11,6 +11,10 @@ from rest_framework.parsers import (
 )
 
 from travel.models import TravelRequest
+from travel.services import (
+    Status,
+    is_legacy_travel_type,
+)
 
 from .models import EmployeeDocument
 from .serializers import (
@@ -53,10 +57,30 @@ def can_access_travel_request(user, travel_request):
         return travel_request.employee == user
 
     if user.has_role("REVIEWER"):
-        return travel_request.status in (
+        ##Legacy document workflow (historical records):
+        ##unchanged behavior.
+        if travel_request.status in (
             TravelRequest.Status.DOCUMENT_PENDING,
             TravelRequest.Status.DOCUMENT_VERIFICATION,
-        )
+        ):
+            return True
+
+        ##New-workflow requests: reviewers drive the
+        ##document stages (travel.services) and need the
+        ##checklist from submission through the rest of the
+        ##lifecycle (verification status feeds the
+        ##settlement). Domestic requests simply return an
+        ##empty checklist when nothing is required.
+        if (
+            not is_legacy_travel_type(
+                travel_request.travel_type
+            )
+            and travel_request.status
+            != TravelRequest.Status.DRAFT
+        ):
+            return True
+
+        return False
 
     if user.has_role("MANAGER"):
         return travel_request.employee.manager == user
@@ -148,6 +172,46 @@ class EmployeeDocumentUploadView(GenericAPIView):
                     )
                 },
                 status=status.HTTP_403_FORBIDDEN,
+            )
+
+        # -------------------------------------------------
+        # 0. Stage guard (backend-authoritative)
+        #
+        # Documents may only be uploaded while the request
+        # is inside its document workflow. Once the request
+        # has moved beyond the document stages (manager
+        # approval and later), uploads are refused so a
+        # late upload can never pull the request backwards.
+        # The vocabulary follows the travel type, exactly
+        # like update_travel_request_document_status.
+        # -------------------------------------------------
+
+        if is_legacy_travel_type(
+            travel_request.travel_type
+        ):
+            upload_window = (
+                Status.SUBMITTED,
+                Status.DOCUMENT_PENDING,
+                Status.DOCUMENT_VERIFICATION,
+            )
+        else:
+            upload_window = (
+                Status.SUBMITTED,
+                Status.DOCUMENTS_PENDING,
+                Status.DOCUMENTS_UNDER_REVIEW,
+            )
+
+        if travel_request.status not in upload_window:
+            return Response(
+                {
+                    "detail": (
+                        "Documents can only be uploaded "
+                        "while the request is in the "
+                        "document workflow. Current "
+                        f"status: {travel_request.status}."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
             )
 
         # -------------------------------------------------

@@ -343,7 +343,10 @@ class WorkflowTransitionApiTests(WorkflowTestBase):
             self.reviewer,
             f"{base}/start-expense-review/",
         )
-        self._post(self.reviewer, f"{base}/settle/")
+        self._post(
+            self.reviewer,
+            f"{base}/settlement/calculate/",
+        )
         self._post(
             self.reviewer,
             f"{base}/start-settlement-approval/",
@@ -383,6 +386,9 @@ class WorkflowTransitionApiTests(WorkflowTestBase):
         )
 
     def test_international_path_with_documents_and_visa(self):
+        ##Phase 21 correction: document verification
+        ##advances the request to MANAGER_APPROVAL, and
+        ##the visa status updates belong to the EMPLOYEE.
         travel_request = self._create_request(
             travel_type="INTERNATIONAL"
         )
@@ -391,6 +397,8 @@ class WorkflowTransitionApiTests(WorkflowTestBase):
         self._post(self.employee, f"{base}/submit/")
         self._post(self.reviewer, f"{base}/start-review/")
 
+        ##No mandatory documents are configured for this
+        ##request, so the reviewer may hand off directly.
         response = self._post(
             self.reviewer,
             f"{base}/submit-for-approval/",
@@ -402,7 +410,7 @@ class WorkflowTransitionApiTests(WorkflowTestBase):
 
         self._post(self.manager, f"{base}/approve/")
 
-        ##Visa flow.
+        ##Reviewer starts the visa stage.
         response = self._post(
             self.reviewer,
             f"{base}/start-visa/",
@@ -412,13 +420,19 @@ class WorkflowTransitionApiTests(WorkflowTestBase):
             "VISA_PROCESSING",
         )
 
+        ##The EMPLOYEE updates the visa; approval advances
+        ##the request to the booking stage.
         response = self._post(
-            self.reviewer,
-            f"{base}/visa-decide/",
-            {"decision": "APPROVED"},
+            self.employee,
+            f"/api/travel-requests/{travel_request.pk}/visa/decision/",
+            {"state": "APPROVED"},
         )
+        self.assertEqual(response.status_code, 200)
+
+        travel_request.refresh_from_db()
+
         self.assertEqual(
-            response.data["status"],
+            travel_request.status,
             "VISA_APPROVED",
         )
 
@@ -548,8 +562,14 @@ class VisaModuleTests(WorkflowTestBase):
         self.assertEqual(response.status_code, 400)
 
     def test_visa_flow_apply_and_approve(self):
+        ##Phase 21 correction: the visa is updated by the
+        ##EMPLOYEE once the request has reached visa
+        ##processing (documents verified, manager
+        ##approved). Reviewer/HR may start the visa stage
+        ##but never update the visa itself.
         travel_request = self._create_request(
-            travel_type="INTERNATIONAL"
+            travel_type="INTERNATIONAL",
+            status="VISA_PROCESSING",
         )
 
         ##Employee can view.
@@ -562,17 +582,17 @@ class VisaModuleTests(WorkflowTestBase):
             response.data["state"], "NOT_APPLIED"
         )
 
-        ##Employee cannot apply.
+        ##Reviewer cannot apply (employee-only).
         response = self._post(
-            self.employee,
+            self.reviewer,
             f"/api/travel-requests/{travel_request.pk}/visa/apply/",
             {"applied_on": "2026-11-20"},
         )
         self.assertEqual(response.status_code, 403)
 
-        ##Reviewer applies.
+        ##Employee applies.
         response = self._post(
-            self.reviewer,
+            self.employee,
             f"/api/travel-requests/{travel_request.pk}/visa/apply/",
             {"applied_on": "2026-11-20"},
         )
@@ -581,15 +601,34 @@ class VisaModuleTests(WorkflowTestBase):
             response.data["state"], "APPLIED"
         )
 
-        ##Reviewer approves.
+        ##Employee marks under process.
         response = self._post(
-            self.reviewer,
+            self.employee,
+            f"/api/travel-requests/{travel_request.pk}/visa/decision/",
+            {"state": "UNDER_PROCESS"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(
+            response.data["state"], "UNDER_PROCESS"
+        )
+
+        ##Employee approves; the request advances to the
+        ##booking stage automatically.
+        response = self._post(
+            self.employee,
             f"/api/travel-requests/{travel_request.pk}/visa/decision/",
             {"state": "APPROVED"},
         )
         self.assertEqual(response.status_code, 200)
         self.assertEqual(
             response.data["state"], "APPROVED"
+        )
+
+        travel_request.refresh_from_db()
+
+        self.assertEqual(
+            travel_request.status,
+            "VISA_APPROVED",
         )
 
     def test_visa_rejection_does_not_advance_request(self):
@@ -606,8 +645,9 @@ class VisaModuleTests(WorkflowTestBase):
             applied_on=date(2026, 11, 20),
         )
 
+        ##The EMPLOYEE records the rejection.
         response = self._post(
-            self.reviewer,
+            self.employee,
             f"/api/travel-requests/{travel_request.pk}/visa/decision/",
             {"state": "REJECTED"},
         )

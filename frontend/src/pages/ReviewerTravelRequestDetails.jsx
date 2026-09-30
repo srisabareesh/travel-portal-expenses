@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/client";
 
+import { useAuth } from "../hooks/useAuth";
 import WorkflowProgress from "../components/WorkflowProgress";
+import DocumentsCard from "../components/DocumentsCard";
 import TravelSections from "../components/TravelSections";
 import {
   PageHeader,
@@ -28,6 +30,7 @@ import {
 function ReviewerTravelRequestDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [travelRequest, setTravelRequest] = useState(null);
   const [documents, setDocuments] = useState([]);
@@ -318,24 +321,8 @@ function ReviewerTravelRequestDetails() {
   }
 
   /* --------------------------------------------------
-     Document Counts
+     Review modal state
      -------------------------------------------------- */
-
-  const totalDocuments = documents.length;
-
-  const pendingDocuments = documents.filter(
-    (document) =>
-      document.status === "UPLOADED" ||
-      document.status === "PENDING_REVIEW"
-  ).length;
-
-  const verifiedDocuments = documents.filter(
-    (document) => document.status === "VERIFIED"
-  ).length;
-
-  const rejectedDocuments = documents.filter(
-    (document) => document.status === "REJECTED"
-  ).length;
 
   const reviewable =
     selectedDocument &&
@@ -387,7 +374,7 @@ function ReviewerTravelRequestDetails() {
           <div>
             <div className="meta-item-label">Employee</div>
             <div className="meta-item-value">
-              {travelRequest.employee_name || travelRequest.employee || "—"}
+              {travelRequest.employee_name || "—"}
             </div>
           </div>
 
@@ -447,45 +434,24 @@ function ReviewerTravelRequestDetails() {
         </div>
       </Card>
 
-      {/* Workflow + business sections */}
+      {/* Workflow + guidance first, then documents, then
+          the visa/booking/expense/settlement sections. */}
       <WorkflowProgress travelRequestId={id} />
 
-      <TravelSections travelRequestId={id} />
+      <DocumentsCard
+        travelRequestId={id}
+        checklist={documents}
+      />
 
-      {/* Document summary */}
-      <Card title="Document summary" className="mb-3">
-        <div className="kpi-grid" style={{ marginBottom: 0 }}>
-          <div className="kpi" style={{ boxShadow: "none" }}>
-            <div className="kpi-label">Total Documents</div>
-            <div className="kpi-value">{totalDocuments}</div>
-          </div>
+      <TravelSections
+        travelRequestId={id}
+        travelRequest={travelRequest}
+        user={user}
+      />
 
-          <div className="kpi" style={{ boxShadow: "none" }}>
-            <div className="kpi-label">Pending Review</div>
-            <div className="kpi-value kpi-value--warning">
-              {pendingDocuments}
-            </div>
-          </div>
-
-          <div className="kpi" style={{ boxShadow: "none" }}>
-            <div className="kpi-label">Verified</div>
-            <div className="kpi-value kpi-value--success">
-              {verifiedDocuments}
-            </div>
-          </div>
-
-          <div className="kpi" style={{ boxShadow: "none" }}>
-            <div className="kpi-label">Rejected</div>
-            <div className="kpi-value kpi-value--danger">
-              {rejectedDocuments}
-            </div>
-          </div>
-        </div>
-      </Card>
-
-      {/* Documents table */}
+      {/* Reviewer verification workspace */}
       <Card
-        title="Employee documents"
+        title="Verify documents"
         subtitle="Open a document to review its contents and record your decision."
         className="mb-3"
         padded={false}

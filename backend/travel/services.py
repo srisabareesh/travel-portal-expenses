@@ -425,6 +425,11 @@ TRANSITION_MAP = {
     ACTION_START_VISA: {
         Status.MANAGER_APPROVED: Status.VISA_PROCESSING,
     },
+    # Visa status updates live in the visa module
+    # (employee-only, POST .../visa/decision/): an APPROVED
+    # decision stores the visa state AND advances the
+    # request. A bare status transition here would advance
+    # the request without recording the visa decision.
     ACTION_VISA_DECIDE: {
         Status.VISA_PROCESSING: Status.VISA_APPROVED,
     },
@@ -444,6 +449,14 @@ TRANSITION_MAP = {
     ACTION_START_EXPENSE_REVIEW: {
         Status.EXPENSE_SUBMISSION: Status.EXPENSE_VERIFICATION,
     },
+    # Module-owned transitions: the settlement and visa
+    # modules use these engine definitions to validate and
+    # advance the request while ALSO storing their own
+    # record (the calculated settlement / the visa
+    # decision). A bare status change without the module
+    # record is exactly what broke the settlement UI, so
+    # these actions are never exposed as generic workflow
+    # endpoints (see MODULE_OWNED_ACTIONS below).
     ACTION_SETTLE: {
         Status.EXPENSE_VERIFICATION: Status.SETTLEMENT_PENDING,
     },
@@ -463,6 +476,21 @@ TRANSITION_MAP = {
         Status.COMPLETED: Status.CLOSED,
     },
 }
+
+# Actions whose transition belongs to a dedicated module
+# (settlement calculation, visa decision). They are defined
+# in TRANSITION_MAP above so the engine remains the single
+# source of truth, but they are never offered through the
+# generic workflow action endpoints or the allowed-actions
+# list: the module endpoints are the only way to run them,
+# because they must store their module record in the same
+# step as the status change.
+MODULE_OWNED_ACTIONS = frozenset(
+    {
+        ACTION_SETTLE,
+        ACTION_VISA_DECIDE,
+    }
+)
 
 # Actions whose target is a terminal exception outcome.
 EXCEPTION_ACTIONS = frozenset(
@@ -486,6 +514,41 @@ def get_workflow(travel_request):
         )
 
     return workflow
+
+
+def get_effective_status(travel_request):
+    """
+    Return the business meaning of the request's stored
+    status.
+
+    Legacy and new vocabularies that mean the same business
+    thing are folded onto their shared family, so workflow
+    logic never has to guess which vocabulary a historical
+    record uses. Values that participate in no family are
+    returned unchanged.
+
+    The stored value is never rewritten by this helper: it
+    is interpretation only.
+    """
+
+    family = status_family(travel_request.status)
+
+    if family == DOCUMENTS_FAMILY:
+        return Status.DOCUMENTS_PENDING
+
+    if family == DOCUMENT_REVIEW_FAMILY:
+        return Status.DOCUMENTS_UNDER_REVIEW
+
+    if family == DECISION_FAMILY:
+        return Status.MANAGER_APPROVED
+
+    if family == REJECTION_FAMILY:
+        return Status.REQUEST_REJECTED
+
+    if family == CANCELLATION_FAMILY:
+        return Status.REQUEST_CANCELLED
+
+    return travel_request.status
 
 
 def validate_transition(
@@ -514,17 +577,31 @@ def validate_transition(
             code="unknown_action",
         )
 
+    ##Interpret the stored status through the family map:
+    ##a legacy value that means the same business thing as
+    ##a new status participates in the new workflow
+    ##(historical records keep their stored value; only
+    ##the written target uses the request's own
+    ##vocabulary). Requests with a legacy travel type keep
+    ##their legacy document flow and are not folded.
+    effective_status = travel_request.status
+
+    if not is_legacy_travel_type(
+        travel_request.travel_type
+    ):
+        effective_status = get_effective_status(
+            travel_request
+        )
+
     if not _authorize:
 
         mapping = TRANSITION_MAP.get(action, {})
 
-        return action, mapping.get(
-            travel_request.status
-        )
+        return action, mapping.get(effective_status)
 
     workflow = get_workflow(travel_request)
 
-    if travel_request.status not in workflow:
+    if effective_status not in workflow:
         raise WorkflowError(
             "This request uses a historical status and "
             "cannot be moved through the new workflow.",
@@ -533,7 +610,7 @@ def validate_transition(
 
     mapping = TRANSITION_MAP.get(action, {})
 
-    target = mapping.get(travel_request.status)
+    target = mapping.get(effective_status)
 
     if target is None:
         raise WorkflowError(
@@ -558,7 +635,7 @@ def validate_transition(
         action not in EXCEPTION_ACTIONS
         and action != ACTION_SUBMIT_FOR_APPROVAL
         and target in workflow
-        and workflow.index(travel_request.status) + 1
+        and workflow.index(effective_status) + 1
         != workflow.index(target)
     ):
         raise WorkflowError(
@@ -589,9 +666,25 @@ def validate_transition(
 
     if (
         action == ACTION_SUBMIT_FOR_APPROVAL
-        and travel_request.status == Status.SUBMITTED
+        and effective_status == Status.SUBMITTED
         and travel_request.travel_type
         != TravelRequest.TravelType.DOMESTIC
+    ):
+        raise WorkflowError(
+            "International requests must pass the "
+            "document stages before manager "
+            "approval.",
+            code="invalid_transition",
+        )
+
+    ##International requests that have not yet entered the
+    ##document stages must not jump straight into manager
+    ##approval either (SUBMITTED -> MANAGER_APPROVAL).
+    if (
+        action == ACTION_SUBMIT_FOR_APPROVAL
+        and effective_status == Status.SUBMITTED
+        and travel_request.travel_type
+        == TravelRequest.TravelType.INTERNATIONAL
     ):
         raise WorkflowError(
             "International requests must pass the "
@@ -608,10 +701,14 @@ def get_current_stage(travel_request):
 
     workflow = get_workflow(travel_request)
 
-    if travel_request.status not in workflow:
+    effective_status = get_effective_status(
+        travel_request
+    )
+
+    if effective_status not in workflow:
         return None
 
-    return travel_request.status
+    return effective_status
 
 
 def get_next_stage(travel_request):
@@ -619,10 +716,14 @@ def get_next_stage(travel_request):
 
     workflow = get_workflow(travel_request)
 
-    if travel_request.status not in workflow:
+    effective_status = get_effective_status(
+        travel_request
+    )
+
+    if effective_status not in workflow:
         return None
 
-    index = workflow.index(travel_request.status)
+    index = workflow.index(effective_status)
 
     if index + 1 >= len(workflow):
         return None
@@ -635,10 +736,14 @@ def get_previous_stage(travel_request):
 
     workflow = get_workflow(travel_request)
 
-    if travel_request.status not in workflow:
+    effective_status = get_effective_status(
+        travel_request
+    )
+
+    if effective_status not in workflow:
         return None
 
-    index = workflow.index(travel_request.status)
+    index = workflow.index(effective_status)
 
     if index == 0:
         return None
@@ -655,6 +760,12 @@ def get_allowed_actions(travel_request, user=None):
     allowed = []
 
     for action_name in _ACTION_BY_NAME:
+
+        ##Module-owned actions (settlement calculation,
+        ##visa decision) are surfaced by their own module
+        ##endpoints/UI, not as generic workflow actions.
+        if action_name in MODULE_OWNED_ACTIONS:
+            continue
 
         try:
             validate_transition(
@@ -679,7 +790,11 @@ def get_workflow_progress(travel_request):
 
     status = travel_request.status
 
-    if status not in workflow:
+    effective_status = get_effective_status(
+        travel_request
+    )
+
+    if effective_status not in workflow:
         return {
             "travel_type": travel_request.travel_type,
             "workflow": list(workflow),
@@ -689,16 +804,160 @@ def get_workflow_progress(travel_request):
             "is_exception": True,
         }
 
-    index = workflow.index(status)
+    index = workflow.index(effective_status)
 
     return {
         "travel_type": travel_request.travel_type,
         "workflow": list(workflow),
-        "current_stage": status,
+        "current_stage": effective_status,
+        "current_status": status,
         "completed_stages": list(workflow[: index + 1]),
         "pending_stage": get_next_stage(travel_request),
         "is_exception": is_exception_status(status),
+        "next_action": get_next_action(travel_request),
+        "pending_with": get_pending_with(travel_request),
     }
+
+
+# ----------------------------------------------------------
+# Human-readable guidance (Phase 21: next action /
+# pending role). The backend is the single source of
+# truth for what happens next and who must act; the
+# frontend only renders these values.
+# ----------------------------------------------------------
+
+_NEXT_ACTION_BY_STAGE = {
+    Status.DRAFT: (
+        "The employee must complete and submit "
+        "the request."
+    ),
+    Status.SUBMITTED: (
+        "Reviewer/HR must start the document review "
+        "(international) or send the request for "
+        "manager approval (domestic)."
+    ),
+    Status.DOCUMENTS_PENDING: (
+        "The employee must upload the required "
+        "documents."
+    ),
+    Status.DOCUMENTS_UNDER_REVIEW: (
+        "Reviewer/HR must verify the required "
+        "documents."
+    ),
+    Status.MANAGER_APPROVAL: (
+        "The manager must approve or reject the "
+        "request."
+    ),
+    Status.MANAGER_APPROVED: (
+        "Reviewer/HR must start the booking "
+        "(and visa processing for international "
+        "travel)."
+    ),
+    Status.VISA_PROCESSING: (
+        "The employee must update the visa status "
+        "until the visa is approved."
+    ),
+    Status.VISA_APPROVED: (
+        "Reviewer/HR must record the flight and "
+        "hotel bookings."
+    ),
+    Status.TRAVEL_BOOKING: (
+        "Reviewer/HR must record the flight and "
+        "hotel bookings, then complete the booking."
+    ),
+    Status.TRAVEL_BOOKED: (
+        "The employee must start the travel."
+    ),
+    Status.TRAVEL_IN_PROGRESS: (
+        "The employee must submit the trip expenses."
+    ),
+    Status.EXPENSE_SUBMISSION: (
+        "Reviewer/HR must start the expense review "
+        "and verify the submitted expenses."
+    ),
+    Status.EXPENSE_VERIFICATION: (
+        "Reviewer/HR must verify the submitted "
+        "expenses and calculate the settlement."
+    ),
+    Status.SETTLEMENT_PENDING: (
+        "Reviewer/HR must send the settlement for "
+        "manager approval."
+    ),
+    Status.SETTLEMENT_APPROVAL: (
+        "The manager must approve the settlement."
+    ),
+    Status.SETTLEMENT_APPROVED: (
+        "Reviewer/HR must process the settlement "
+        "payment."
+    ),
+    Status.SETTLEMENT_PROCESSING: (
+        "Reviewer/HR must complete the request after "
+        "the payment is done."
+    ),
+    Status.COMPLETED: (
+        "The employee must close the request."
+    ),
+}
+
+_PENDING_WITH_BY_STAGE = {
+    Status.DRAFT: "Employee",
+    Status.SUBMITTED: "Reviewer/HR",
+    Status.DOCUMENTS_PENDING: "Employee",
+    Status.DOCUMENTS_UNDER_REVIEW: "Reviewer/HR",
+    Status.MANAGER_APPROVAL: "Manager",
+    Status.MANAGER_APPROVED: "Reviewer/HR",
+    Status.VISA_PROCESSING: "Employee",
+    Status.VISA_APPROVED: "Reviewer/HR",
+    Status.TRAVEL_BOOKING: "Reviewer/HR",
+    Status.TRAVEL_BOOKED: "Employee",
+    Status.TRAVEL_IN_PROGRESS: "Employee",
+    Status.EXPENSE_SUBMISSION: "Employee",
+    Status.EXPENSE_VERIFICATION: "Reviewer/HR",
+    Status.SETTLEMENT_PENDING: "Reviewer/HR",
+    Status.SETTLEMENT_APPROVAL: "Manager",
+    Status.SETTLEMENT_APPROVED: "Reviewer/HR",
+    Status.SETTLEMENT_PROCESSING: "Reviewer/HR",
+    Status.COMPLETED: "Employee",
+}
+
+
+def get_next_action(travel_request):
+    """
+    Human-readable description of the next workflow
+    action for the request's current stage.
+    """
+
+    stage = get_current_stage(travel_request)
+
+    if stage is None:
+        return "This request uses a historical status; "
+        "no workflow actions are available."
+
+    if is_exception_status(stage):
+        return (
+            "No further actions: the request has been "
+            "decided outside the normal flow."
+        )
+
+    return _NEXT_ACTION_BY_STAGE.get(
+        stage,
+        "No pending action; the request is in a "
+        "terminal stage.",
+    )
+
+
+def get_pending_with(travel_request):
+    """
+    The role that must act on the request's current
+    stage.
+    """
+
+    stage = get_current_stage(travel_request)
+
+    if stage is None or is_exception_status(stage):
+        return None
+
+    return _PENDING_WITH_BY_STAGE.get(stage)
 
 
 def apply_workflow_transition_with_side_effects(

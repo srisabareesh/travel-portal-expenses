@@ -5,10 +5,19 @@ from .models import Visa
 
 class VisaSerializer(serializers.ModelSerializer):
 
-    decided_by_name = serializers.CharField(
-        source="decided_by.get_full_name",
-        read_only=True,
-    )
+    decided_by_name = serializers.SerializerMethodField()
+
+    def get_decided_by_name(self, obj):
+        user = obj.decided_by
+
+        if user is None:
+            return ""
+
+        full_name = (
+            user.get_full_name() or ""
+        ).strip()
+
+        return full_name or user.get_username()
 
     class Meta:
         model = Visa

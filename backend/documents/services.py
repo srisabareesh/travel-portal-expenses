@@ -1,5 +1,7 @@
 from travel.services import (
     is_legacy_status,
+    is_legacy_travel_type,
+    Status,
 )
 
 from .models import DocumentRequirement
@@ -168,22 +170,31 @@ def update_travel_request_document_status(
     Rules:
 
     1. If any mandatory document is missing:
-       DOCUMENT_PENDING.
+       DOCUMENTS_PENDING (DOCUMENT_PENDING for
+       legacy travel types).
 
     2. If all mandatory documents are present
        and one or more are waiting for review:
-       DOCUMENT_VERIFICATION.
+       DOCUMENTS_UNDER_REVIEW.
 
     3. If all mandatory documents are verified:
-       DOCUMENT_VERIFICATION.
-
-       The Manager still makes the final
-       travel-request decision.
+       the request advances to MANAGER_APPROVAL
+       when it is still inside the document stages
+       (new workflows). Legacy travel-type records
+       keep DOCUMENT_VERIFICATION: the old flow has
+       no manager-approval stage.
 
     4. If a mandatory document is rejected:
-       DOCUMENT_VERIFICATION.
+       DOCUMENTS_UNDER_REVIEW. The employee can
+       replace it.
 
-       The employee can replace it.
+    The vocabulary is chosen from the TRAVEL TYPE,
+    not from the current status: SUBMITTED is a
+    shared value used by both the legacy and the new
+    lifecycles, so it cannot discriminate. Historical
+    requests with a legacy travel type keep receiving
+    legacy document statuses; new requests always
+    receive new ones.
     """
 
     requirements = get_required_documents(
@@ -204,7 +215,7 @@ def update_travel_request_document_status(
 
     has_missing = False
     has_pending_review = False
-    has_rejected = False
+    all_verified = bool(mandatory_requirements)
 
     for requirement in mandatory_requirements:
 
@@ -214,48 +225,63 @@ def update_travel_request_document_status(
 
         if document is None:
             has_missing = True
+            all_verified = False
             continue
 
         if (
             document.status
             == "REJECTED"
         ):
-            has_rejected = True
+            all_verified = False
 
         elif document.status in (
             "UPLOADED",
             "PENDING_REVIEW",
         ):
             has_pending_review = True
+            all_verified = False
 
-    ##Phase 3.9: requests that entered the new workflow
-    ##use the new document statuses; requests that still
-    ##carry a legacy status (historical records) keep
-    ##receiving legacy document statuses. Nothing is
-    ##converted: each vocabulary stays self-consistent.
-    use_new_vocabulary = not is_legacy_status(
-        travel_request.status
+        elif document.status != "VERIFIED":
+            all_verified = False
+
+    ##Phase 3.9: requests with a legacy travel type
+    ##(historical records) keep the legacy document
+    ##statuses; new DOMESTIC/INTERNATIONAL requests
+    ##always use the new vocabulary. The travel type is
+    ##the reliable discriminator - SUBMITTED is shared
+    ##by both lifecycles and cannot be used here.
+    use_new_vocabulary = not is_legacy_travel_type(
+        travel_request.travel_type
     )
 
     if use_new_vocabulary:
 
-        pending_status = (
-            travel_request.Status.DOCUMENTS_PENDING
-        )
+        pending_status = Status.DOCUMENTS_PENDING
 
-        review_status = (
-            travel_request.Status.DOCUMENTS_UNDER_REVIEW
-        )
+        review_status = Status.DOCUMENTS_UNDER_REVIEW
 
     else:
 
-        pending_status = (
-            travel_request.Status.DOCUMENT_PENDING
-        )
+        pending_status = Status.DOCUMENT_PENDING
 
-        review_status = (
-            travel_request.Status.DOCUMENT_VERIFICATION
-        )
+        review_status = Status.DOCUMENT_VERIFICATION
+
+    ##The document stages this request can legally be in,
+    ##in its own vocabulary. A request that has already
+    ##moved past the document workflow (manager approval
+    ##and later) must never be pulled backwards by a late
+    ##document event, so its status is left untouched.
+    document_stage_statuses = (
+        pending_status,
+        review_status,
+        Status.SUBMITTED,
+    )
+
+    if (
+        travel_request.status
+        not in document_stage_statuses
+    ):
+        return travel_request.status
 
     if has_missing:
 
@@ -265,13 +291,24 @@ def update_travel_request_document_status(
 
         new_status = review_status
 
-    elif has_rejected:
-
-        new_status = review_status
-
     else:
 
         new_status = review_status
+
+        ##All mandatory documents are verified: a request
+        ##that is still inside the document stages moves
+        ##on to manager approval. Requests that already
+        ##left the document stages (or legacy records
+        ##without a manager-approval stage) are left
+        ##where they are.
+        if (
+            all_verified
+            and mandatory_requirements
+            and travel_request.status
+            in (pending_status, review_status)
+            and use_new_vocabulary
+        ):
+            new_status = Status.MANAGER_APPROVAL
 
     if (
         travel_request.status

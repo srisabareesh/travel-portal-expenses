@@ -7,7 +7,8 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from travel.models import TravelRequest
-from users.permissions import IsReviewer, IsEmployee
+from travel.services import Status as RequestStatus
+from users.permissions import IsEmployee
 
 from .models import Visa
 from .serializers import VisaSerializer
@@ -37,6 +38,19 @@ def _get_or_create_visa(travel_request):
     )
 
     return visa
+
+
+def _request_in_visa_stage(travel_request):
+    """
+    The visa lifecycle may only be driven while the
+    request is actually in (or past, for an approved
+    visa being corrected) the visa processing stage.
+    """
+
+    return (
+        travel_request.status
+        == RequestStatus.VISA_PROCESSING
+    )
 
 
 def _can_view_visa(user, travel_request):
@@ -92,7 +106,13 @@ class VisaDetailView(APIView):
 
 class VisaApplyView(APIView):
 
-    permission_classes = [IsReviewer]
+    """
+    Employee-only: the employee records that they applied
+    for the visa. Reviewer/HR and managers may view the
+    visa but never update it.
+    """
+
+    permission_classes = [IsEmployee]
 
     def post(self, request, travel_request_id):
         travel_request = _get_international_request(
@@ -108,6 +128,37 @@ class VisaApplyView(APIView):
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ##Visa updates are gated on the workflow stage:
+        ##documents verified, manager approved, visa
+        ##processing started.
+        if not _request_in_visa_stage(
+            travel_request
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Visa updates are only available "
+                        "while the request is in visa "
+                        "processing (after documents are "
+                        "verified and the manager has "
+                        "approved)."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ##Only the travelling employee may update.
+        if travel_request.employee != request.user:
+            return Response(
+                {
+                    "detail": (
+                        "Only the employee travelling can "
+                        "update the visa status."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
             )
 
         visa = _get_or_create_visa(travel_request)
@@ -160,7 +211,16 @@ class VisaApplyView(APIView):
 
 class VisaDecisionView(APIView):
 
-    permission_classes = [IsReviewer]
+    """
+    Employee-only visa status updates (APPLIED /
+    UNDER_PROCESS / APPROVED / REJECTED).
+
+    On APPROVED the request automatically advances to the
+    booking stage. On REJECTED the request stays in
+    VISA_PROCESSING so the employee can re-apply.
+    """
+
+    permission_classes = [IsEmployee]
 
     def post(self, request, travel_request_id):
         travel_request = _get_international_request(
@@ -178,20 +238,51 @@ class VisaDecisionView(APIView):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        ##Visa updates are gated on the workflow stage.
+        if not _request_in_visa_stage(
+            travel_request
+        ):
+            return Response(
+                {
+                    "detail": (
+                        "Visa updates are only available "
+                        "while the request is in visa "
+                        "processing (after documents are "
+                        "verified and the manager has "
+                        "approved)."
+                    )
+                },
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        ##Only the travelling employee may update.
+        if travel_request.employee != request.user:
+            return Response(
+                {
+                    "detail": (
+                        "Only the employee travelling can "
+                        "update the visa status."
+                    )
+                },
+                status=status.HTTP_403_FORBIDDEN,
+            )
+
         visa = _get_or_create_visa(travel_request)
 
         if (
             visa.state
             not in (
+                Visa.State.NOT_APPLIED,
                 Visa.State.APPLIED,
                 Visa.State.UNDER_PROCESS,
+                Visa.State.REJECTED,
             )
         ):
             return Response(
                 {
                     "detail": (
-                        "Only an applied or under-process "
-                        "visa can receive a decision."
+                        "Only a visa that is not yet "
+                        "approved can be updated."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -200,15 +291,17 @@ class VisaDecisionView(APIView):
         decision = request.data.get("state")
 
         if decision not in (
+            Visa.State.APPLIED,
+            Visa.State.UNDER_PROCESS,
             Visa.State.APPROVED,
             Visa.State.REJECTED,
-            Visa.State.UNDER_PROCESS,
         ):
             return Response(
                 {
                     "state": (
-                        "State must be APPROVED, REJECTED "
-                        "or UNDER_PROCESS."
+                        "State must be APPLIED, "
+                        "UNDER_PROCESS, APPROVED or "
+                        "REJECTED."
                     )
                 },
                 status=status.HTTP_400_BAD_REQUEST,
@@ -219,6 +312,14 @@ class VisaDecisionView(APIView):
             "remarks",
             visa.remarks,
         )
+
+        if decision in (
+            Visa.State.APPLIED,
+        ):
+            visa.applied_on = (
+                request.data.get("applied_on")
+                or timezone.now().date()
+            )
 
         if decision in (
             Visa.State.APPROVED,
@@ -232,6 +333,55 @@ class VisaDecisionView(APIView):
             visa.decision_at = None
 
         visa.save()
+
+        ##On APPROVED the request advances to the booking
+        ##stage; on REJECTED it stays in VISA_PROCESSING.
+        if decision == Visa.State.APPROVED:
+            travel_request.status = (
+                RequestStatus.VISA_APPROVED
+            )
+
+            travel_request.save(
+                update_fields=["status", "updated_at"]
+            )
+
+            try:
+
+                from audit.services import log_action
+
+                log_action(
+                    user=request.user,
+                    action="VISA_APPROVED",
+                    travel_request=travel_request,
+                    previous_value=(
+                        RequestStatus.VISA_PROCESSING
+                    ),
+                    new_value=(
+                        RequestStatus.VISA_APPROVED
+                    ),
+                )
+
+            except Exception:
+                pass
+
+            try:
+
+                from notifications.services import (
+                    notify_request_status_change,
+                )
+
+                notify_request_status_change(
+                    travel_request,
+                    event="REQUEST_VISA_APPROVED",
+                    message=(
+                        f"Travel request "
+                        f"{travel_request.request_number}: "
+                        f"visa approved; booking may start."
+                    ),
+                )
+
+            except Exception:
+                pass
 
         serializer = VisaSerializer(visa)
 

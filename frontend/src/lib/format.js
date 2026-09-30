@@ -7,6 +7,24 @@
  */
 
 /* ------------------------------------------------------------------ */
+/* Currencies (mirrors backend expenses/currency.py — the backend      */
+/* remains the validation authority; this list only drives the UI      */
+/* dropdown so both stay in sync)                                      */
+/* ------------------------------------------------------------------ */
+
+export const CURRENCIES = [
+  "INR",
+  "USD",
+  "EUR",
+  "GBP",
+  "AED",
+  "SGD",
+  "AUD",
+  "CAD",
+  "JPY",
+];
+
+/* ------------------------------------------------------------------ */
 /* Request statuses                                                    */
 /* ------------------------------------------------------------------ */
 

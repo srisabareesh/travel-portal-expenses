@@ -498,11 +498,12 @@ class InternationalE2EScenarioTests(E2ETestBase):
         )
         self.assertEqual(response.status_code, 201)
 
-        ##12-13. All mandatory documents verified: manager
-        ##approval becomes available.
-        response = self._post(
-            self.reviewer,
-            f"{base}/submit-for-approval/",
+        ##12-13. All mandatory documents verified: the
+        ##request automatically advances to manager
+        ##approval, where the manager can decide.
+        response = self.client.get(
+            f"{base}/",
+            HTTP_AUTHORIZATION=_auth(self.employee),
         )
         self.assertEqual(
             response.data["status"],
@@ -518,7 +519,9 @@ class InternationalE2EScenarioTests(E2ETestBase):
             "MANAGER_APPROVED",
         )
 
-        ##14-15. Visa processing and approval.
+        ##14-15. Visa processing and approval. The
+        ##reviewer starts the visa stage; the EMPLOYEE
+        ##then owns the visa status updates.
         response = self._post(
             self.reviewer,
             f"{base}/start-visa/",
@@ -527,25 +530,42 @@ class InternationalE2EScenarioTests(E2ETestBase):
             response.data["status"], "VISA_PROCESSING"
         )
 
-        ##The visa record materializes with the first
-        ##state change (UNDER_PROCESS via the visa API).
+        ##The employee records the visa progression.
         self._post(
-            self.reviewer,
+            self.employee,
             f"/api/travel-requests/{request_id}/visa/decision/",
             {"state": "UNDER_PROCESS"},
         )
 
         response = self._post(
-            self.reviewer,
-            f"{base}/visa-decide/",
-            {"decision": "APPROVED"},
+            self.employee,
+            f"/api/travel-requests/{request_id}/visa/decision/",
+            {"state": "APPROVED"},
         )
+        self.assertEqual(response.status_code, 200)
         self.assertEqual(
-            response.data["status"], "VISA_APPROVED"
+            response.data["state"], "APPROVED"
         )
 
-        ##16-17. Booking.
-        self._post(self.reviewer, f"{base}/start-booking/")
+        ##Visa approval advanced the request to the
+        ##booking stage automatically.
+        travel_request = TravelRequest.objects.get(
+            pk=request_id
+        )
+
+        self.assertEqual(
+            travel_request.status, "VISA_APPROVED"
+        )
+
+        ##16-17. Booking. The reviewer must first open
+        ##the booking stage from VISA_APPROVED.
+        response = self._post(
+            self.reviewer,
+            f"{base}/start-booking/",
+        )
+        self.assertEqual(
+            response.data["status"], "TRAVEL_BOOKING"
+        )
 
         self.client.post(
             f"{base}/bookings/flights/",

@@ -1,26 +1,27 @@
 import { useEffect, useState } from "react";
-import { useNavigate, useParams, Link } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 import apiClient from "../api/client";
 
 import WorkflowProgress from "../components/WorkflowProgress";
+import DocumentsCard from "../components/DocumentsCard";
 import TravelSections from "../components/TravelSections";
+import { useAuth } from "../hooks/useAuth";
 import {
   PageHeader,
   Breadcrumb,
   Card,
   Button,
-  Table,
-  DocumentStatusBadge,
   TravelTypeBadge,
   RequestStatusBadge,
   LoadingState,
   ErrorState,
 } from "../components/ui";
-import { formatDate, travelWindow } from "../lib/format";
+import { travelWindow } from "../lib/format";
 
 function TravelRequestDetails() {
   const { id } = useParams();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [travelRequest, setTravelRequest] = useState(null);
   const [checklist, setChecklist] = useState([]);
@@ -118,36 +119,6 @@ function TravelRequestDetails() {
     return null;
   }
 
-  const totalDocuments = checklist.length;
-
-  const verifiedDocuments = checklist.filter(
-    (document) => document.status === "VERIFIED"
-  ).length;
-
-  const missingDocuments = checklist.filter(
-    (document) =>
-      document.status === "MISSING" ||
-      document.status === "REJECTED"
-  ).length;
-
-  const pendingDocuments = checklist.filter(
-    (document) =>
-      document.status === "UPLOADED" ||
-      document.status === "PENDING_REVIEW" ||
-      document.status === "EXPIRING_SOON"
-  ).length;
-
-  const completionPercentage =
-    totalDocuments > 0
-      ? Math.round((verifiedDocuments / totalDocuments) * 100)
-      : 0;
-
-  const needsDocumentAction = checklist.some(
-    (document) =>
-      document.status === "MISSING" ||
-      document.status === "REJECTED"
-  );
-
   return (
     <>
       <Breadcrumb
@@ -177,7 +148,7 @@ function TravelRequestDetails() {
           <div>
             <div className="meta-item-label">Employee</div>
             <div className="meta-item-value">
-              {travelRequest.employee_name || travelRequest.employee || "—"}
+              {travelRequest.employee_name || "—"}
             </div>
           </div>
 
@@ -230,124 +201,29 @@ function TravelRequestDetails() {
         </div>
       </Card>
 
-      {/* Workflow progress + business sections (Phase 16/17) */}
+      {/* Workflow progress + guidance (backend-provided
+          current status / next action / pending with), then
+          documents and business sections in workflow order. */}
       <WorkflowProgress
         travelRequestId={id}
         onChanged={fetchTravelRequestDetails}
       />
 
-      <TravelSections travelRequestId={id} />
+      <DocumentsCard
+        checklist={checklist}
+        uploadBaseUrl={`/travel-requests/${id}/documents/upload`}
+        canUpload={
+          travelRequest.status === "SUBMITTED" ||
+          travelRequest.status === "DOCUMENTS_PENDING" ||
+          travelRequest.status === "DOCUMENTS_UNDER_REVIEW"
+        }
+      />
 
-      {/* Documents */}
-      {totalDocuments > 0 && (
-        <Card
-          title="Documents"
-          subtitle={
-            needsDocumentAction
-              ? "Some documents are missing or were rejected — upload them to continue."
-              : `${verifiedDocuments} of ${totalDocuments} documents verified.`
-          }
-          className="mb-3"
-          actions={
-            needsDocumentAction ? (
-              <Link
-                to={`/travel-requests/${id}/documents/upload`}
-                className="btn btn--primary"
-              >
-                Upload Required Document
-              </Link>
-            ) : undefined
-          }
-        >
-          <div className="flex-between mb-1">
-            <span className="secondary">
-              <strong>{verifiedDocuments}</strong> of{" "}
-              <strong>{totalDocuments}</strong> verified
-            </span>
-            <span className="secondary">{completionPercentage}%</span>
-          </div>
-
-          <div className="progress" role="progressbar" aria-valuenow={completionPercentage} aria-valuemin={0} aria-valuemax={100} aria-label="Document verification progress">
-            <div
-              className="progress-bar"
-              style={{ width: `${completionPercentage}%` }}
-            />
-          </div>
-
-          <div className="kpi-grid mt-2" style={{ marginBottom: 0 }}>
-            <div className="kpi" style={{ boxShadow: "none" }}>
-              <div className="kpi-label">Total</div>
-              <div className="kpi-value">{totalDocuments}</div>
-            </div>
-
-            <div className="kpi" style={{ boxShadow: "none" }}>
-              <div className="kpi-label">Verified</div>
-              <div className="kpi-value kpi-value--success">
-                {verifiedDocuments}
-              </div>
-            </div>
-
-            <div className="kpi" style={{ boxShadow: "none" }}>
-              <div className="kpi-label">Pending</div>
-              <div className="kpi-value kpi-value--warning">
-                {pendingDocuments}
-              </div>
-            </div>
-
-            <div className="kpi" style={{ boxShadow: "none" }}>
-              <div className="kpi-label">Missing / Rejected</div>
-              <div className="kpi-value kpi-value--danger">
-                {missingDocuments}
-              </div>
-            </div>
-          </div>
-
-          <div className="mt-3">
-            <Table
-              compact
-              columns={[
-                { key: "document", label: "Document" },
-                { key: "mandatory", label: "Required" },
-                { key: "status", label: "Status" },
-                { key: "expiry", label: "Expiry" },
-                { key: "action", label: "Action", align: "right" },
-              ]}
-            >
-              {checklist.map((document) => (
-                <tr key={document.document_type_id}>
-                  <td className="cell-strong">
-                    {document.document_type || "—"}
-                  </td>
-
-                  <td>{document.mandatory ? "Yes" : "No"}</td>
-
-                  <td>
-                    <DocumentStatusBadge status={document.status} />
-                  </td>
-
-                  <td>{formatDate(document.expiry_date)}</td>
-
-                  <td style={{ textAlign: "right" }}>
-                    {document.status === "MISSING" ||
-                    document.status === "REJECTED" ? (
-                      <Link
-                        to={`/travel-requests/${id}/documents/upload`}
-                        className="btn btn--secondary btn--sm"
-                      >
-                        Upload
-                      </Link>
-                    ) : document.status === "VERIFIED" ? (
-                      <span className="secondary">✓ Verified</span>
-                    ) : (
-                      <span className="secondary">Awaiting review</span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </Table>
-          </div>
-        </Card>
-      )}
+      <TravelSections
+        travelRequestId={id}
+        travelRequest={travelRequest}
+        user={user}
+      />
 
       <p className="mt-3">
         <Button variant="ghost" size="sm" onClick={fetchTravelRequestDetails}>
